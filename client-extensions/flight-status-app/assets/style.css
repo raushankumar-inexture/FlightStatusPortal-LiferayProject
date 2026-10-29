@@ -113,3 +113,24 @@ flight-status-app .fa-alt a { color: var(--fa-blue); font-weight: 600; }
 /* In the page editor, don't pin the header/footer so Liferay's editor toolbar (Publish etc.) stays usable. */
 flight-status-app.fa-editing .fa-header, flight-status-app.fa-editing .fa-footer { position: static; }
 flight-status-app.fa-editing .fa-view { min-height: 0; padding-top: 1.5rem; padding-bottom: 1.5rem; }
+
+flight-status-app .fa-btn.block-auto { background: var(--fa-blue); color: #fff; padding: .6rem 1.1rem; }
+flight-status-app .fa-btn.block-auto:hover { background: #0948c4; }
+flight-status-app .fa-btn.ghost { background: #fff; color: var(--fa-blue); border: 1px solid var(--fa-blue); }
+flight-status-app .fa-adminbtns { display: flex; gap: .75rem; flex-wrap: wrap; }
+flight-status-app .fa-tablewrap { overflow-x: auto; background: #fff; border: 1px solid var(--fa-line); border-radius: 14px; }
+flight-status-app .fa-table { width: 100%; border-collapse: collapse; }
+flight-status-app .fa-table th { text-align: left; padding: .8rem 1rem; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: #6b7790; background: var(--fa-bg); }
+flight-status-app .fa-table td { padding: .8rem 1rem; border-top: 1px solid var(--fa-line); }
+flight-status-app .fa-actions { text-align: right; white-space: nowrap; }
+flight-status-app .fa-link { background: none; border: 0; padding: .25rem .5rem; color: var(--fa-blue); font-weight: 600; cursor: pointer; }
+flight-status-app .fa-link.danger { color: #b42318; }
+flight-status-app .fa-notice { margin-bottom: 1rem; padding: .75rem 1rem; border-radius: 10px; background: #dcf7e3; color: #137333; font-weight: 600; }
+flight-status-app .fa-notice.error { background: #fde8e8; color: #b42318; }
+flight-status-app .fa-modal { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 1rem; background: rgba(18,39,92,.55); overflow-y: auto; }
+flight-status-app .fa-modalbox { width: 100%; max-width: 520px; padding: 1.75rem; background: #fff; border-radius: 16px; }
+flight-status-app .fa-modalbox h2 { margin: 0 0 1rem; }
+flight-status-app .fa-authform select { padding: .75rem 1rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: 1rem; background: #fff; }
+
+/* Fallback until the toolbar is measured: Liferay's control menu is 56px tall. */
+body.has-control-menu flight-status-app { --fa-top: 56px; }

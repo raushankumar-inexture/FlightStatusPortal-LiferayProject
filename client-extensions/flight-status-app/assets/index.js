@@ -10,6 +10,7 @@ const ROUTES = [
 	{path: 'gates', slug: 'gates', label: 'Gates'},
 	{path: 'login', slug: 'login', label: 'Login', hidden: true},
 	{path: 'register', slug: 'register', label: 'Register', hidden: true},
+	{path: 'admin', slug: 'admin', label: 'Admin', hidden: true},
 ];
 
 const ICONS = {
@@ -53,6 +54,17 @@ class FlightStatusApp extends HTMLElement {
 		this.route();
 	}
 
+	fitToControlMenu() {
+		const apply = () => {
+			const bar = document.querySelector('.control-menu, #ControlMenu, [class*="control-menu-level-1"]');
+			const h = bar ? bar.getBoundingClientRect().height : 0;
+			if (h > 0) this.style.setProperty('--fa-top', Math.round(bar.getBoundingClientRect().bottom) + 'px');
+		};
+		apply();
+		window.addEventListener('load', apply, {once: true});
+		[300, 1000, 2500].forEach((ms) => setTimeout(apply, ms));
+	}
+
 	disconnectedCallback() {
 		clearInterval(this._timer);
 	}
@@ -86,27 +98,236 @@ class FlightStatusApp extends HTMLElement {
 		return this._airports;
 	}
 
-	route() {
+	async route() {
 		const {route: current, root} = pageInfo();
 		this._root = root;
 		const editing = /[?&]p_l_mode=edit/.test(location.search) || !!document.querySelector('.page-editor, .page-editor__toolbar, .control-menu-level-2, [class*="page-editor"]') || document.body.classList.contains('has-edit-mode-menu');
 		this.classList.toggle('fa-editing', editing);
-		const controlMenu = document.querySelector('.control-menu');
-		this.style.setProperty('--fa-top', (controlMenu ? controlMenu.offsetHeight : 0) + 'px');
-		const q = new URLSearchParams(location.search).get('q') || '';
+		this.fitToControlMenu();
+		const params = new URLSearchParams(location.search);
+		const q = params.get('q') || '';
+
+		const admin = await this.isAdmin();
+		let viewingSite = false;
+		try {
+			if (params.get('viewsite') === '1') sessionStorage.setItem('faViewSite', '1');
+			if (current === 'admin') sessionStorage.removeItem('faViewSite');
+			viewingSite = sessionStorage.getItem('faViewSite') === '1';
+		} catch (e) {}
+
+		// Administrators live in the admin area unless they chose "View site".
+		if (admin && !viewingSite && current !== 'admin' && !editing) {
+			location.replace(root + '/admin');
+			return;
+		}
+
+		const adminMode = admin && !viewingSite;
+		const tab = params.get('tab') || 'dashboard';
+		this._adminTab = tab;
+		const links = adminMode
+			? [['dashboard', 'Dashboard'], ['flights', 'Flights'], ['airports', 'Airports'], ['gates', 'Gates']]
+				.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${current === 'admin' && tab === t[0] ? 'active' : ''}">${t[1]}</a>`).join('') +
+				`<a class="fa-auth" href="${root}/home?viewsite=1">View site</a>`
+			: ROUTES.filter((r) => !r.hidden).map((r) => `<a href="${root}/${r.slug}" class="${r.path === current ? 'active' : ''}">${r.label}</a>`).join('') +
+				(admin ? `<a class="fa-auth" href="${root}/admin">Admin</a>` : '');
+		const footerLinks = adminMode
+			? '<span>Admin Portal</span>'
+			: ROUTES.filter((r) => !r.hidden).map((r) => `<a href="${root}/${r.slug}">${r.label}</a>`).join('') + '<span class="fa-sep">&middot;</span><span>Live flight information</span>';
 
 		this.innerHTML =
-			'<header class="fa-header"><div class="fa-nav"><a class="fa-brand" href="' + root + '/home"><span class="fa-logo">' + ICONS.plane + '</span>Flight Status <b>Portal</b></a>' +
+			'<header class="fa-header"><div class="fa-nav"><a class="fa-brand" href="' + root + (adminMode ? '/admin' : '/home') + '"><span class="fa-logo">' + ICONS.plane + '</span>Flight Status <b>' + (adminMode ? 'Admin' : 'Portal') + '</b></a>' +
 			'<button class="fa-burger" type="button" aria-label="Menu">&#9776;</button>' +
-			'<nav class="fa-links">' + ROUTES.filter((r) => !r.hidden).map((r) => `<a href="${root}/${r.slug}" class="${r.path === current ? 'active' : ''}">${r.label}</a>`).join('') + this.authLinks(root, current) + '</nav></div></header>' +
+			'<nav class="fa-links">' + links + this.authLinks(root, current) + '</nav></div></header>' +
 			'<main class="fa-view"><div class="fa-msg">Loading...</div></main>' +
-			'<footer class="fa-footer"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span class="fa-sep">&middot;</span>' +
-			ROUTES.filter((r) => !r.hidden).map((r) => `<a href="${root}/${r.slug}">${r.label}</a>`).join('') + '<span class="fa-sep">&middot;</span><span>Live flight information</span></footer>';
+			'<footer class="fa-footer"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span class="fa-sep">&middot;</span>' + footerLinks + '</footer>';
 
 		this.querySelector('.fa-burger').addEventListener('click', () => this.querySelector('.fa-links').classList.toggle('open'));
 
 		const view = this.querySelector('.fa-view');
 		this['view_' + current](view, q).catch((e) => (view.innerHTML = `<div class="fa-msg">Error: ${esc(e.message)}</div>`));
+	}
+
+	async isAdmin() {
+		if (!Liferay.ThemeDisplay.isSignedIn()) return false;
+		if (this._admin === undefined) {
+			try {
+				const user = await this.json('/o/headless-admin-user/v1.0/my-user-account');
+				this._admin = (user.roleBriefs || []).some((r) => r.name === 'Administrator');
+			} catch (e) {
+				this._admin = false;
+			}
+		}
+		return this._admin;
+	}
+
+	async signInPath() {
+		if (!this._signInPath) {
+			const res = await fetch(location.origin + Liferay.ThemeDisplay.getPathContext() + '/c/portal/login', {credentials: 'include'});
+			this._signInPath = new URL(res.url).pathname;
+		}
+		return this._signInPath;
+	}
+
+	async view_admin(view) {
+		if (!(await this.isAdmin())) {
+			view.innerHTML = '<div class="fa-auth-box"><h1>Admin only</h1><p>You need to sign in as an administrator to manage flights, airports and gates.</p>' +
+				'<a class="fa-btn block" style="display:block;text-align:center;text-decoration:none" href="' + this._root + '/login">Go to login</a></div>';
+			return;
+		}
+		await this.renderAdmin(view, new URLSearchParams(location.search).get('tab') || 'dashboard');
+	}
+
+	adminEntities() {
+		const site = SITE_ID();
+		const statuses = [['OnTime', 'On Time'], ['Delayed', 'Delayed'], ['Boarding', 'Boarding'], ['Departed', 'Departed'], ['Landed', 'Landed'], ['Cancelled', 'Cancelled']];
+		return {
+			airports: {
+				label: 'Airport', plural: 'Airports', list: '/o/c/airports/?pageSize=200', create: '/o/c/airports', item: '/o/c/airports/',
+				fields: [{k: 'code', l: 'Code (e.g. DEL)', req: true}, {k: 'name', l: 'Airport name', req: true}, {k: 'city', l: 'City', req: true}, {k: 'country', l: 'Country', req: true}],
+				cols: [['code', 'Code'], ['name', 'Name'], ['city', 'City'], ['country', 'Country']],
+			},
+			gates: {
+				label: 'Gate', plural: 'Gates', list: '/o/c/gates/scopes/' + site + '?pageSize=200', create: '/o/c/gates/scopes/' + site, item: '/o/c/gates/',
+				fields: [{k: 'gateNumber', l: 'Gate number (e.g. A1)', req: true}, {k: 'terminal', l: 'Terminal (e.g. T1)', req: true}],
+				cols: [['gateNumber', 'Gate'], ['terminal', 'Terminal']],
+			},
+			flights: {
+				label: 'Flight', plural: 'Flights', list: '/o/c/flights/scopes/' + site + '?pageSize=200&sort=departureTime:asc', create: '/o/c/flights/scopes/' + site, item: '/o/c/flights/', statuses,
+			},
+		};
+	}
+
+	async apiWrite(method, url, body) {
+		const res = await getFetch()(url, {method, credentials: 'include', headers: {'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
+		if (!res.ok) {
+			let msg = 'HTTP ' + res.status;
+			try {
+				const j = await res.json();
+				msg = j.title || j.message || msg;
+			} catch (e) {}
+			throw new Error(msg);
+		}
+		return res.status === 204 ? null : res.json();
+	}
+
+	async renderAdmin(view, tab, notice) {
+		this._adminTab = tab;
+		const ENT = this.adminEntities();
+		const [flightsRaw, airportsRaw, gatesRaw] = await Promise.all([
+			this.json(ENT.flights.list), this.json(ENT.airports.list), this.json(ENT.gates.list),
+		]);
+		const airports = airportsRaw.items, gates = gatesRaw.items, flights = flightsRaw.items;
+		const apById = Object.fromEntries(airports.map((a) => [a.id, a]));
+		const tabs = [['dashboard', 'Dashboard'], ['flights', 'Flights (' + flights.length + ')'], ['airports', 'Airports (' + airports.length + ')'], ['gates', 'Gates (' + gates.length + ')']];
+
+		let body = '';
+		if (tab === 'dashboard') {
+			const delayed = flights.filter((f) => f.showstatus && f.showstatus.key === 'Delayed').length;
+			body = '<div class="fa-stats" style="margin:0 0 1.5rem">' +
+				[['plane', flights.length, 'Flights'], ['building', airports.length, 'Airports'], ['gate', gates.length, 'Gates'], ['clock', delayed, 'Delayed flights']]
+					.map((s) => `<div class="fa-stat"><span class="fa-ico">${ICONS[s[0]]}</span><div><b>${s[1]}</b><span>${s[2]}</span></div></div>`).join('') + '</div>' +
+				'<div class="fa-adminbtns"><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button><button class="fa-btn block-auto" data-add="airports">+ Add Airport</button><button class="fa-btn block-auto" data-add="gates">+ Add Gate</button></div>';
+		} else if (tab === 'flights') {
+			body = '<div class="fa-head"><h2>Flights</h2><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button></div>' +
+				this.adminTable(['Flight', 'Route', 'Departure', 'Status', 'Delay'], flights.map((f) => {
+					const o = apById[f.r_originAirport_c_airportId], d = apById[f.r_destinationAirport_c_airportId];
+					return [f.id, [esc(f.flightNumber), esc((o ? o.code : '?') + ' → ' + (d ? d.code : '?')), fmtDate(f.departureTime) + ' ' + fmtTime(f.departureTime),
+						'<span class="fa-badge ' + statusClass(f.showstatus ? f.showstatus.name : '') + '">' + esc(f.showstatus ? f.showstatus.name : '') + '</span>', (f.delayMinutes || 0) + ' min']];
+				}));
+		} else {
+			const E = ENT[tab], items = tab === 'airports' ? airports : gates;
+			body = '<div class="fa-head"><h2>' + E.plural + '</h2><button class="fa-btn block-auto" data-add="' + tab + '">+ Add ' + E.label + '</button></div>' +
+				this.adminTable(E.cols.map((c) => c[1]), items.map((it) => [it.id, E.cols.map((c) => esc(it[c[0]]))]));
+		}
+
+		view.innerHTML = '<div class="fa-title"><h1>Admin Portal</h1><p>Manage flights, airports and gates. Changes appear on the public pages straight away.</p></div>' +
+			(notice ? `<div class="fa-notice ${notice.error ? 'error' : ''}">${esc(notice.text)}</div>` : '') + body;
+
+		view.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => this.adminForm(view, b.dataset.add, null, {airports, flights, gates})));
+		view.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
+			const list = tab === 'flights' ? flights : tab === 'airports' ? airports : gates;
+			this.adminForm(view, tab, list.find((x) => String(x.id) === b.dataset.edit), {airports, flights, gates});
+		}));
+		view.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+			if (!confirm('Delete this ' + ENT[tab].label.toLowerCase() + '? This cannot be undone.')) return;
+			try {
+				await this.apiWrite('DELETE', ENT[tab].item + b.dataset.del);
+				this._airports = null;
+				await this.renderAdmin(view, tab, {text: ENT[tab].label + ' deleted.'});
+			} catch (e) {
+				await this.renderAdmin(view, tab, {error: true, text: 'Could not delete: ' + e.message + (tab === 'airports' ? ' (an airport used by flights cannot be deleted)' : '')});
+			}
+		}));
+	}
+
+	adminTable(headers, rows) {
+		if (!rows.length) return '<div class="fa-msg">Nothing here yet. Use the Add button.</div>';
+		return '<div class="fa-tablewrap"><table class="fa-table"><thead><tr>' + headers.map((h) => '<th>' + h + '</th>').join('') + '<th></th></tr></thead><tbody>' +
+			rows.map((r) => '<tr>' + r[1].map((c) => '<td>' + c + '</td>').join('') + `<td class="fa-actions"><button class="fa-link" data-edit="${r[0]}">Edit</button><button class="fa-link danger" data-del="${r[0]}">Delete</button></td></tr>`).join('') +
+			'</tbody></table></div>';
+	}
+
+	adminForm(view, kind, item, data) {
+		const ENT = this.adminEntities(), E = ENT[kind];
+		const toLocal = (v) => {
+			const d = parseDate(v);
+			if (!d) return '';
+			const p = (n) => String(n).padStart(2, '0');
+			return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+		};
+		const opt = (arr, sel) => arr.map((a) => `<option value="${esc(a[0])}" ${String(a[0]) === String(sel) ? 'selected' : ''}>${esc(a[1])}</option>`).join('');
+		let fields;
+		if (kind === 'flights') {
+			const apOpts = data.airports.map((a) => [a.id, a.code + ' – ' + a.city]);
+			fields = `<label>Flight number<input name="flightNumber" required value="${esc(item ? item.flightNumber : '')}" /></label>` +
+				`<label>Status<select name="showstatus">${opt(E.statuses, item && item.showstatus ? item.showstatus.key : 'OnTime')}</select></label>` +
+				`<div class="fa-two"><label>From<select name="origin" required>${opt(apOpts, item && item.r_originAirport_c_airportId)}</select></label>` +
+				`<label>To<select name="destination" required>${opt(apOpts, item && item.r_destinationAirport_c_airportId)}</select></label></div>` +
+				`<div class="fa-two"><label>Departure<input name="departureTime" type="datetime-local" required value="${toLocal(item && item.departureTime)}" /></label>` +
+				`<label>Arrival<input name="arrivalTime" type="datetime-local" required value="${toLocal(item && item.arrivalTime)}" /></label></div>` +
+				`<label>Delay (minutes)<input name="delayMinutes" type="number" min="0" value="${item ? item.delayMinutes || 0 : 0}" /></label>`;
+		} else {
+			fields = E.fields.map((f) => `<label>${f.l}<input name="${f.k}" ${f.req ? 'required' : ''} value="${esc(item ? item[f.k] : '')}" /></label>`).join('');
+		}
+		const modal = document.createElement('div');
+		modal.className = 'fa-modal';
+		modal.innerHTML = `<div class="fa-modalbox"><h2>${item ? 'Edit' : 'Add'} ${E.label}</h2><form class="fa-authform">${fields}<div class="fa-error" hidden></div>` +
+			'<div class="fa-two"><button class="fa-btn block" type="submit">Save</button><button class="fa-btn block ghost" type="button" data-cancel>Cancel</button></div></form></div>';
+		this.appendChild(modal);
+		modal.querySelector('[data-cancel]').addEventListener('click', () => modal.remove());
+		const form = modal.querySelector('form'), err = modal.querySelector('.fa-error');
+		form.addEventListener('submit', async (e) => {
+			e.preventDefault();
+			err.hidden = true;
+			let payload;
+			if (kind === 'flights') {
+				const dep = new Date(form.departureTime.value), arr = new Date(form.arrivalTime.value);
+				if (form.origin.value === form.destination.value) { err.textContent = 'Origin and destination must be different.'; err.hidden = false; return; }
+				if (!(arr > dep)) { err.textContent = 'Arrival must be after departure.'; err.hidden = false; return; }
+				payload = {
+					flightNumber: form.flightNumber.value.trim(), showstatus: form.showstatus.value,
+					departureTime: dep.toISOString(), arrivalTime: arr.toISOString(),
+					flightDurationMinutes: Math.round((arr - dep) / 60000), delayMinutes: Number(form.delayMinutes.value || 0),
+					r_originAirport_c_airportId: Number(form.origin.value), r_destinationAirport_c_airportId: Number(form.destination.value),
+					r_gate_c_airportId: Number(form.origin.value),
+				};
+			} else {
+				payload = Object.fromEntries(E.fields.map((f) => [f.k, form[f.k].value.trim()]));
+			}
+			const btn = form.querySelector('button[type=submit]');
+			btn.disabled = true;
+			try {
+				if (item) await this.apiWrite('PATCH', E.item + item.id, payload);
+				else await this.apiWrite('POST', E.create, payload);
+				modal.remove();
+				this._airports = null;
+				await this.renderAdmin(view, kind, {text: E.label + (item ? ' updated.' : ' added.')});
+			} catch (x) {
+				err.textContent = 'Could not save: ' + x.message;
+				err.hidden = false;
+				btn.disabled = false;
+			}
+		});
 	}
 
 	authLinks(root, current) {
@@ -117,9 +338,9 @@ class FlightStatusApp extends HTMLElement {
 		return `<a class="fa-auth ${current === 'login' ? 'active' : ''}" href="${root}/login">Login</a><a class="fa-auth primary ${current === 'register' ? 'active' : ''}" href="${root}/register">Register</a>`;
 	}
 
-	loginUrl(extra) {
+	async loginUrl(extra) {
 		const P = '_com_liferay_login_web_portlet_LoginPortlet_';
-		const path = new URL(Liferay.ThemeDisplay.getSignInURL(), location.origin).pathname;
+		const path = await this.signInPath();
 		return location.origin + path + '?p_p_id=com_liferay_login_web_portlet_LoginPortlet&p_p_lifecycle=1&p_p_state=maximized&p_p_mode=view&' + P + 'jakarta.portlet.action=' + extra + '&' + P + 'mvcRenderCommandName=' + extra + '&p_auth=' + Liferay.authToken;
 	}
 
@@ -148,8 +369,8 @@ class FlightStatusApp extends HTMLElement {
 			btn.disabled = true;
 			try {
 				const home = this._root + '/home';
-				const res = await this.post(this.loginUrl('%2Flogin%2Flogin'), {login: form.login.value, password: form.password.value, saveLastPath: 'false', redirect: home});
-				const signInPath = new URL(Liferay.ThemeDisplay.getSignInURL(), location.origin).pathname;
+				const res = await this.post(await this.loginUrl('%2Flogin%2Flogin'), {login: form.login.value, password: form.password.value, saveLastPath: 'false', redirect: home});
+				const signInPath = await this.signInPath();
 				if (res.ok && !new URL(res.url).pathname.startsWith(signInPath)) {
 					location.href = home;
 					return;
@@ -189,7 +410,7 @@ class FlightStatusApp extends HTMLElement {
 			btn.disabled = true;
 			try {
 				const home = this._root + '/home';
-				const res = await this.post(this.loginUrl('%2Flogin%2Fcreate_account'), {
+				const res = await this.post(await this.loginUrl('%2Flogin%2Fcreate_account'), {
 					cmd: 'add', firstName: form.firstName.value, lastName: form.lastName.value, screenName: form.screenName.value,
 					emailAddress: form.emailAddress.value, password1: form.password1.value, password2: form.password2.value,
 					birthdayMonth: 0, birthdayDay: 1, birthdayYear: 1970, languageId: 'en_US', saveLastPath: 'false', redirect: home,
