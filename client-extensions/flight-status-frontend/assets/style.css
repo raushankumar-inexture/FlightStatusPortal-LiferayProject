@@ -1,0 +1,19 @@
+flight-status-frontend { display: block; }
+flight-status-frontend .fs-app { font-family: inherit; padding: 1.5rem; max-width: 1000px; margin: 0 auto; }
+flight-status-frontend .fs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+flight-status-frontend .fs-header h2 { margin: 0; font-size: 1.75rem; }
+flight-status-frontend .fs-refresh { border: 1px solid #0b5fff; background: #fff; color: #0b5fff; border-radius: 6px; padding: .4rem .9rem; cursor: pointer; font-weight: 600; }
+flight-status-frontend .fs-refresh:hover { background: #0b5fff; color: #fff; }
+flight-status-frontend .fs-msg { padding: 1rem; color: #6b6c7e; }
+flight-status-frontend .fs-list { display: grid; gap: 1rem; }
+flight-status-frontend .fs-card { display: grid; grid-template-columns: 110px 1fr auto; gap: 1rem; align-items: center; padding: 1rem 1.25rem; background: #fff; border: 1px solid #e7e7ed; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+flight-status-frontend .fs-num { font-size: 1.25rem; font-weight: 700; }
+flight-status-frontend .fs-route { display: flex; align-items: center; gap: .75rem; font-size: 1.4rem; font-weight: 600; }
+flight-status-frontend .fs-arrow { color: #6b6c7e; }
+flight-status-frontend .fs-times { color: #6b6c7e; font-size: .85rem; margin-top: .25rem; font-weight: 400; }
+flight-status-frontend .fs-badge { padding: .3rem .8rem; border-radius: 999px; font-size: .8rem; font-weight: 700; background: #e7e7ed; color: #272833; }
+flight-status-frontend .fs-badge.delayed { background: #fde8e8; color: #b42318; }
+flight-status-frontend .fs-badge.boarding { background: #fff4d6; color: #8a5a00; }
+flight-status-frontend .fs-badge.ontime, flight-status-frontend .fs-badge.landed { background: #dcf7e3; color: #137333; }
+flight-status-frontend .fs-delay { display: block; font-size: .75rem; color: #b42318; margin-top: .25rem; text-align: right; }
+@media (max-width: 600px) { flight-status-frontend .fs-card { grid-template-columns: 1fr; } }

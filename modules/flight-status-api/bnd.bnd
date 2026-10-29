@@ -1,0 +1,7 @@
+Bundle-Name: Flight Status API
+Bundle-SymbolicName: com.flight.api
+Bundle-Version: 1.0.0
+Export-Package: com.flight.api
+Liferay-Require-SchemaVersion: 1.0.0
+Provide-Capability: osgi.service;objectClass:List<String>="javax.ws.rs.core.Application";effective:=active
+Require-Capability: osgi.extender;filter:="(&(osgi.extender=jsp.taglib)(uri=http://java.sun.com/portlet_2_0))",osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.8))"

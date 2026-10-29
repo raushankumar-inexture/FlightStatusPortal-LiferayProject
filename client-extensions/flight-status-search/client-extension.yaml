@@ -1,0 +1,13 @@
+assemble:
+  - from: assets
+    into: static
+flight-status-search:
+  cssURLs:
+    - style.css
+  htmlElementName: flight-status-search
+  instanceable: false
+  name: Flight Status Search
+  type: customElement
+  urls:
+    - index.js
+  useESM: false

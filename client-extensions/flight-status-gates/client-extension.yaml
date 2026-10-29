@@ -1,0 +1,13 @@
+assemble:
+  - from: assets
+    into: static
+flight-status-gates:
+  cssURLs:
+    - style.css
+  htmlElementName: flight-status-gates
+  instanceable: false
+  name: Flight Status Gates
+  type: customElement
+  urls:
+    - index.js
+  useESM: false

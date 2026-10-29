@@ -1,0 +1,13 @@
+assemble:
+  - from: assets
+    into: static
+flight-status-frontend:
+  cssURLs:
+    - style.css
+  htmlElementName: flight-status-frontend
+  instanceable: false
+  name: Flight Status Frontend
+  type: customElement
+  urls:
+    - index.js
+  useESM: false

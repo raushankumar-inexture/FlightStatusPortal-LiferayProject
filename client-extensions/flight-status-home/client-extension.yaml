@@ -1,0 +1,13 @@
+assemble:
+  - from: assets
+    into: static
+flight-status-home:
+  cssURLs:
+    - style.css
+  htmlElementName: flight-status-home
+  instanceable: false
+  name: Flight Status Home
+  type: customElement
+  urls:
+    - index.js
+  useESM: false
