@@ -134,3 +134,55 @@ flight-status-app .fa-authform select { padding: .75rem 1rem; border: 1px solid 
 
 /* Fallback until the toolbar is measured: Liferay's control menu is 56px tall. */
 body.has-control-menu flight-status-app { --fa-top: 56px; }
+
+flight-status-app .fa-map { height: 580px; border-radius: 14px; border: 1px solid var(--fa-line); overflow: hidden; z-index: 1; }
+flight-status-app .fa-livebar { display: flex; gap: 1rem; align-items: center; margin-bottom: .75rem; flex-wrap: wrap; }
+flight-status-app .fa-livesearch { flex: 1; min-width: 220px; padding: .7rem 1rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: 1rem; }
+flight-status-app .fa-livestate { color: #6b7790; font-size: .85rem; }
+flight-status-app .fa-credit { margin: .5rem 0 0; color: #6b7790; font-size: .8rem; }
+flight-status-app .fa-plane { background: none; border: 0; }
+flight-status-app .leaflet-container img.leaflet-tile, flight-status-app .leaflet-container img { max-width: none !important; max-height: none !important; }
+flight-status-app .leaflet-pane, flight-status-app .leaflet-top, flight-status-app .leaflet-bottom { z-index: 5; }
+flight-status-app .fa-citybar .fa-citysearch { flex: 1; min-width: 220px; padding: .7rem 1rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: 1rem; }
+flight-status-app .fa-btn-light { background: #fff; border: 1px solid var(--fa-line); color: #1c2434; }
+flight-status-app .fa-citylist { margin-top: 1.25rem; }
+flight-status-app .fa-citylist .fa-h2 { font-size: 1.15rem; margin: 0 0 .75rem; }
+flight-status-app .fa-empty { color: #6b7790; }
+
+flight-status-app .fa-bpform { background: #fff; border: 1px solid var(--fa-line); border-radius: 14px; padding: 1.25rem; display: grid; gap: 1rem; max-width: 720px; }
+flight-status-app .fa-bpform label { display: grid; gap: .35rem; font-weight: 600; }
+flight-status-app .fa-bpform select, flight-status-app .fa-bpform input { padding: .7rem 1rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: 1rem; }
+flight-status-app .fa-seats { display: grid; gap: .3rem; justify-content: center; margin: .75rem 0; max-height: 360px; overflow-y: auto; padding: .5rem; background: var(--fa-bg); border-radius: 10px; }
+flight-status-app .fa-seatrow { display: flex; gap: .3rem; align-items: center; justify-content: center; }
+flight-status-app .fa-seatrow span { width: 1.6rem; text-align: right; color: #6b7790; font-size: .8rem; margin-right: .3rem; }
+flight-status-app .fa-seatrow em { width: 1.4rem; }
+flight-status-app .fa-seat { width: 2.1rem; height: 2.1rem; border: 1px solid #9fb4e8; border-radius: 6px; background: #fff; font-size: .8rem; cursor: pointer; }
+flight-status-app .fa-seat:hover:not(.taken) { background: #e6eeff; }
+flight-status-app .fa-seat.taken { background: #d5dae4; border-color: #d5dae4; color: #8a94a8; cursor: not-allowed; }
+flight-status-app .fa-seat.mine { background: var(--fa-blue); border-color: var(--fa-blue); color: #fff; }
+flight-status-app .fa-seatkey { display: flex; gap: 1rem; justify-content: center; color: #6b7790; font-size: .85rem; }
+flight-status-app .fa-seatkey i { display: inline-block; width: .9rem; height: .9rem; border-radius: 3px; margin-right: .3rem; vertical-align: middle; border: 1px solid #9fb4e8; background: #fff; }
+flight-status-app .fa-seatkey i.taken { background: #d5dae4; border-color: #d5dae4; }
+flight-status-app .fa-seatkey i.mine { background: var(--fa-blue); border-color: var(--fa-blue); }
+flight-status-app .fa-bpresult { margin-top: 1.5rem; }
+flight-status-app .fa-pass { max-width: 720px; border-radius: 16px; overflow: hidden; background: #fff; border: 1px solid var(--fa-line); box-shadow: 0 8px 24px rgba(15, 30, 80, .12); }
+flight-status-app .fa-pass-top { display: flex; justify-content: space-between; align-items: center; padding: .9rem 1.25rem; background: #0f1e50; color: #fff; }
+flight-status-app .fa-pass-top span { display: flex; gap: .5rem; align-items: center; }
+flight-status-app .fa-pass-body { display: flex; gap: 1.25rem; padding: 1.25rem; flex-wrap: wrap; }
+flight-status-app .fa-pass-main { flex: 1; min-width: 260px; }
+flight-status-app .fa-pass-route { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+flight-status-app .fa-pass-route div { display: grid; }
+flight-status-app .fa-pass-route b { font-size: 2rem; }
+flight-status-app .fa-pass-route span, flight-status-app .fa-pass-grid span { color: #6b7790; font-size: .75rem; text-transform: uppercase; }
+flight-status-app .fa-pass-route i { flex: 1; text-align: center; color: var(--fa-blue); border-top: 2px dashed #b9c6e6; padding-top: 0; }
+flight-status-app .fa-pass-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .9rem; }
+flight-status-app .fa-pass-grid div { display: grid; }
+flight-status-app .fa-pass-qr { display: grid; justify-items: center; align-content: center; gap: .4rem; border-left: 2px dashed #b9c6e6; padding-left: 1.25rem; }
+flight-status-app .fa-pass-qr svg { width: 130px; height: 130px; }
+flight-status-app .fa-pass-actions { margin-top: 1rem; }
+@media (max-width: 640px) { flight-status-app .fa-pass-grid { grid-template-columns: repeat(2, 1fr); } flight-status-app .fa-pass-qr { border-left: 0; padding-left: 0; } }
+@media print {
+	body.fa-print-mode * { visibility: hidden; }
+	body.fa-print-mode flight-status-app .fa-pass, body.fa-print-mode flight-status-app .fa-pass * { visibility: visible; }
+	body.fa-print-mode flight-status-app .fa-pass { position: fixed; left: 0; top: 0; box-shadow: none; }
+}
