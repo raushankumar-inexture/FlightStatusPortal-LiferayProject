@@ -130,7 +130,39 @@ public class BoardingApplication extends Application {
         }
     }
 
-    /** Reserves a seat and creates the boarding pass for the signed-in user. */
+    /** Looks up a booking by PNR and last name so the user can see it before choosing a seat. */
+    @GET
+    @Path("/booking")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response booking(
+        @Context HttpServletRequest request, @QueryParam("siteId") long siteId, @QueryParam("pnr") String pnr,
+        @QueryParam("lastName") String lastName) {
+
+        try {
+            if (_user(request) == null) {
+                return _error(401, "Please log in");
+            }
+
+            ObjectEntry booking = _findBooking(siteId, pnr, lastName);
+
+            if (booking == null) {
+                return _error(404, "Booking not found. Check the PNR and last name.");
+            }
+
+            String problem = _bookingProblem(booking);
+
+            if (problem != null) {
+                return _error(409, problem);
+            }
+
+            return Response.ok(_bookingJson(booking).toString()).build();
+        }
+        catch (Exception exception) {
+            return _error(500, "Could not look up the booking");
+        }
+    }
+
+    /** Checks in a booking: reserves the seat and creates the boarding pass. */
     @Consumes(MediaType.APPLICATION_JSON)
     @POST
     @Path("/pass")
@@ -153,19 +185,35 @@ public class BoardingApplication extends Application {
             JSONObject input = JSONFactoryUtil.createJSONObject(body);
 
             long siteId = input.getLong("siteId");
-            String flightNumber = input.getString("flightNumber").trim();
-            String name = input.getString("passengerName").trim();
             String seat = input.getString("seat").trim().toUpperCase();
 
-            if (name.isEmpty() || (name.length() > 60)) {
-                return _error(400, "Enter the passenger name");
-            }
-
-            if (!seat.matches("(?:[1-9]|[12][0-9]|30)[A-F]")) {
+            if (!seat.matches("(?:[1-9]|1[0-9]|20)[A-F]")) {
                 return _error(400, "Choose a valid seat");
             }
 
             synchronized (_LOCK) {
+                ObjectEntry booking = _findBooking(siteId, input.getString("pnr"), input.getString("lastName"));
+
+                if (booking == null) {
+                    return _error(404, "Booking not found. Check the PNR and last name.");
+                }
+
+                String problem = _bookingProblem(booking);
+
+                if (problem != null) {
+                    return _error(409, problem);
+                }
+
+                Map<String, Serializable> b = booking.getValues();
+
+                String travelClass = _travelClass(b);
+
+                if (!_seatInClass(seat, travelClass)) {
+                    return _error(400, "That seat is not in your " + travelClass + " class");
+                }
+
+                String flightNumber = String.valueOf(b.get("flightNumber"));
+
                 ObjectEntry flight = _findFlight(siteId, flightNumber);
 
                 if (flight == null) {
@@ -200,19 +248,36 @@ public class BoardingApplication extends Application {
 
                 Map<String, Serializable> pass = new HashMap<>();
 
-                pass.put("pnr", _newPnr());
+                pass.put("pnr", String.valueOf(b.get("pnr")));
                 pass.put("flightNumber", flightNumber);
-                pass.put("passengerName", name);
+                pass.put("passengerName", b.get("firstName") + " " + b.get("lastName"));
                 pass.put("seat", seat);
+                pass.put("travelClass", travelClass);
                 pass.put("origin", String.valueOf(origin.get("code")));
                 pass.put("originCity", String.valueOf(origin.get("city")));
                 pass.put("destination", String.valueOf(destination.get("code")));
                 pass.put("destinationCity", String.valueOf(destination.get("city")));
-                pass.put("gate", _gate(siteId, flight.getObjectEntryId()));
+                pass.put("gate", _gate(siteId, flightNumber));
                 pass.put("departureTime", (Date)f.get("departureTime"));
                 pass.put("passengerEmail", user.getEmailAddress());
 
-                return Response.ok(_pass(_add("C_BoardingPass", siteId, user, pass)).toString()).build();
+                ObjectEntry created = _add("C_BoardingPass", siteId, user, pass);
+
+                Map<String, Serializable> checkedIn = new HashMap<>(b);
+
+                checkedIn.put("bookingStatus", "CheckedIn");
+
+                ServiceContext serviceContext = new ServiceContext();
+
+                serviceContext.setCompanyId(user.getCompanyId());
+                serviceContext.setScopeGroupId(siteId);
+                serviceContext.setUserId(user.getUserId());
+
+                _objectEntryLocalService.updateObjectEntry(
+                    user.getUserId(), booking.getObjectEntryId(), booking.getObjectEntryFolderId(), checkedIn,
+                    serviceContext);
+
+                return Response.ok(_pass(created).toString()).build();
             }
         }
         catch (Exception exception) {
@@ -220,6 +285,74 @@ public class BoardingApplication extends Application {
 
             return _error(500, "Could not create the boarding pass");
         }
+    }
+
+    private JSONObject _bookingJson(ObjectEntry booking) throws Exception {
+        Map<String, Serializable> b = booking.getValues();
+
+        JSONObject json = JSONFactoryUtil.createJSONObject();
+
+        json.put("pnr", String.valueOf(b.get("pnr")));
+        json.put("flightNumber", String.valueOf(b.get("flightNumber")));
+        json.put("passengerName", b.get("firstName") + " " + b.get("lastName"));
+        json.put("travelClass", _travelClass(b));
+
+        return json;
+    }
+
+    /** First, Business or Economy (older bookings without a class are Economy). */
+    private String _travelClass(Map<String, Serializable> values) {
+        String value = String.valueOf(values.get("travelClass"));
+
+        return ("First".equals(value) || "Business".equals(value)) ? value : "Economy";
+    }
+
+    /** First class is rows 1-2, Business rows 3-6 and Economy rows 7-20. */
+    private boolean _seatInClass(String seat, String travelClass) {
+        int row = Integer.parseInt(seat.substring(0, seat.length() - 1));
+
+        if ("First".equals(travelClass)) {
+            return row <= 2;
+        }
+
+        if ("Business".equals(travelClass)) {
+            return (row >= 3) && (row <= 6);
+        }
+
+        return row >= 7;
+    }
+
+    /** Null when the booking can be checked in, otherwise the message to show. */
+    private String _bookingProblem(ObjectEntry booking) {
+        String status = String.valueOf(booking.getValues().get("bookingStatus"));
+
+        if ("CheckedIn".equals(status)) {
+            return "Already checked in";
+        }
+
+        if ("Cancelled".equals(status)) {
+            return "This booking was cancelled";
+        }
+
+        return null;
+    }
+
+    private ObjectEntry _findBooking(long siteId, String pnr, String lastName) throws Exception {
+        if ((pnr == null) || (lastName == null) || pnr.trim().isEmpty() || lastName.trim().isEmpty()) {
+            return null;
+        }
+
+        for (ObjectEntry entry : _entries("C_Booking", siteId)) {
+            Map<String, Serializable> b = entry.getValues();
+
+            if (pnr.trim().equalsIgnoreCase(String.valueOf(b.get("pnr"))) &&
+                lastName.trim().equalsIgnoreCase(String.valueOf(b.get("lastName")))) {
+
+                return entry;
+            }
+        }
+
+        return null;
     }
 
     private ObjectEntry _add(String objectName, long siteId, User user, Map<String, Serializable> values)
@@ -272,14 +405,20 @@ public class BoardingApplication extends Application {
     }
 
     /** Gates are shared out between flights so every pass shows one. */
-    private String _gate(long siteId, long flightEntryId) throws Exception {
+    private String _gate(long siteId, String flightNumber) throws Exception {
         List<ObjectEntry> gates = _entries("C_Gate", siteId);
 
         if (gates.isEmpty()) {
             return "TBA";
         }
 
-        return String.valueOf(gates.get((int)(flightEntryId % gates.size())).getValues().get("gateNumber"));
+        int sum = 0;
+
+        for (char c : flightNumber.toCharArray()) {
+            sum += c;
+        }
+
+        return String.valueOf(gates.get(sum % gates.size()).getValues().get("gateNumber"));
     }
 
     private String _newPnr() {
@@ -301,7 +440,7 @@ public class BoardingApplication extends Application {
 
         for (String key : new String[] {
                 "pnr", "flightNumber", "passengerName", "seat", "origin", "originCity", "destination",
-                "destinationCity", "gate", "passengerEmail"
+                "destinationCity", "gate", "passengerEmail", "travelClass"
             }) {
 
             json.put(key, String.valueOf(v.get(key)));

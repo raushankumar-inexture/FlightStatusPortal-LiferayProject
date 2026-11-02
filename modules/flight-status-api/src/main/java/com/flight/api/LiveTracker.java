@@ -298,14 +298,157 @@ public class LiveTracker {
         _lastCall = System.currentTimeMillis();
     }
 
+    private static final String _USER_AGENT = "FlightStatusPortal/1.0";
+
+    private static final String _PHOTO_USER_AGENT =
+        "FlightStatusPortal/1.0 (+https://github.com/raushankumar-inexture/FlightStatusPortal-LiferayProject)";
+
+    private static final Map<String, Object[]> _planePhotos = new LinkedHashMap<>();
+
+    /**
+     * One real photo of an aircraft, found by its ADS-B hex code through the
+     * free Planespotters API. Cached for an hour. Returns "{}" when there is none.
+     */
+    public static String getPlanePhoto(String hex) throws Exception {
+        String key = hex.toLowerCase(Locale.ROOT);
+        long now = System.currentTimeMillis();
+        Object[] cached;
+
+        synchronized (_planePhotos) {
+            cached = _planePhotos.get(key);
+        }
+
+        if ((cached != null) && ((now - (Long)cached[0]) < 3_600_000L)) {
+            return (String)cached[1];
+        }
+
+        JSONObject out = JSONFactoryUtil.createJSONObject();
+
+        JSONArray photos = JSONFactoryUtil.createJSONObject(
+            _getExternal("https://api.planespotters.net/pub/photos/hex/" + key, _PHOTO_USER_AGENT)).getJSONArray("photos");
+
+        if ((photos != null) && (photos.length() > 0)) {
+            JSONObject photo = photos.getJSONObject(0);
+            JSONObject thumbnail = photo.getJSONObject("thumbnail_large");
+
+            if (thumbnail != null) {
+                out.put("src", thumbnail.getString("src"));
+                out.put("link", photo.getString("link"));
+                out.put("photographer", photo.getString("photographer"));
+            }
+        }
+
+        synchronized (_planePhotos) {
+            if (_planePhotos.size() >= 500) {
+                _planePhotos.remove(_planePhotos.keySet().iterator().next());
+            }
+
+            _planePhotos.put(key, new Object[] {now, out.toString()});
+        }
+
+        return out.toString();
+    }
+
+    private static final Map<String, Object[]> _routes = new LinkedHashMap<>();
+
+    /**
+     * The usual route of an airline flight, found by its callsign through the
+     * free adsbdb.com API. Cached for six hours (also when nothing is found).
+     * Returns "{}" when the route is not known.
+     */
+    public static String getRoute(String callsign) throws Exception {
+        String key = callsign.toUpperCase(Locale.ROOT);
+        long now = System.currentTimeMillis();
+        Object[] cached;
+
+        synchronized (_routes) {
+            cached = _routes.get(key);
+        }
+
+        if ((cached != null) && ((now - (Long)cached[0]) < 21_600_000L)) {
+            return (String)cached[1];
+        }
+
+        JSONObject out = JSONFactoryUtil.createJSONObject();
+
+        JSONObject response = JSONFactoryUtil.createJSONObject(
+            _getExternal("https://api.adsbdb.com/v0/callsign/" + key, _PHOTO_USER_AGENT)).getJSONObject("response");
+
+        JSONObject route = (response == null) ? null : response.getJSONObject("flightroute");
+
+        if (route != null) {
+            out.put("origin", _place(route.getJSONObject("origin")));
+            out.put("destination", _place(route.getJSONObject("destination")));
+
+            JSONObject airline = route.getJSONObject("airline");
+
+            if (airline != null) {
+                out.put("airline", airline.getString("name"));
+            }
+        }
+
+        synchronized (_routes) {
+            if (_routes.size() >= 1000) {
+                _routes.remove(_routes.keySet().iterator().next());
+            }
+
+            _routes.put(key, new Object[] {now, out.toString()});
+        }
+
+        return out.toString();
+    }
+
+    private static JSONObject _place(JSONObject airport) {
+        JSONObject place = JSONFactoryUtil.createJSONObject();
+
+        if (airport != null) {
+            place.put("code", airport.getString("iata_code"));
+            place.put("city", airport.getString("municipality"));
+            place.put("name", airport.getString("name"));
+            place.put("country", airport.getString("country_name"));
+            place.put("lat", airport.getDouble("latitude"));
+            place.put("lon", airport.getDouble("longitude"));
+        }
+
+        return place;
+    }
+
     private static String _get(String url) throws Exception {
+        return _get(url, _USER_AGENT);
+    }
+
+    private static final Object _EXTERNAL_LOCK = new Object();
+
+    private static long _lastExternalCall;
+
+    /** Routes and photos have their own, shorter queue so they never wait for the map data. */
+    private static String _getExternal(String url, String userAgent) throws Exception {
+        synchronized (_EXTERNAL_LOCK) {
+            long wait = (_lastExternalCall + 250) - System.currentTimeMillis();
+
+            if (wait > 0) {
+                Thread.sleep(wait);
+            }
+
+            _lastExternalCall = System.currentTimeMillis();
+        }
+
+        return _fetch(url, userAgent);
+    }
+
+    private static String _get(String url, String userAgent) throws Exception {
         _throttle();
+
+        return _fetch(url, userAgent);
+    }
+
+    private static String _fetch(String url, String userAgent) throws Exception {
 
         HttpURLConnection connection = (HttpURLConnection)new URL(url).openConnection();
 
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(8000);
-        connection.setRequestProperty("User-Agent", "FlightStatusPortal/1.0");
+        connection.setRequestProperty("User-Agent", userAgent);
 
         try (InputStream inputStream = connection.getInputStream()) {
             return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);

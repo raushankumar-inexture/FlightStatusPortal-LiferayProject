@@ -105,6 +105,40 @@ public class LiveApplication extends Application {
         }
     }
 
+    /** Where an airline flight comes from and goes to, for the Live Map. */
+    @GET
+    @Path("/route")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response route(@QueryParam("callsign") String callsign) {
+        if ((callsign == null) || !callsign.matches("[0-9A-Za-z]{3,8}")) {
+            return Response.status(400).entity("{\"error\":\"Bad callsign\"}").build();
+        }
+
+        try {
+            return Response.ok(LiveTracker.getRoute(callsign)).build();
+        }
+        catch (Exception exception) {
+            return Response.ok("{}").build();
+        }
+    }
+
+    /** One photo of an aircraft for the Live Map popup. */
+    @GET
+    @Path("/photo")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response photo(@QueryParam("hex") String hex) {
+        if ((hex == null) || !hex.matches("[0-9a-fA-F]{6}")) {
+            return Response.status(400).entity("{\"error\":\"Bad aircraft code\"}").build();
+        }
+
+        try {
+            return Response.ok(LiveTracker.getPlanePhoto(hex)).build();
+        }
+        catch (Exception exception) {
+            return Response.ok("{}").build();
+        }
+    }
+
     /** Read-only list of flights, so visitors who cannot call the Objects API can still see them. */
     @GET
     @Path("/flights")
@@ -120,6 +154,7 @@ public class LiveApplication extends Application {
 
                 flight.put("id", entry.getObjectEntryId());
                 flight.put("flightNumber", _text(v.get("flightNumber")));
+                flight.put("airline", _text(v.get("airline")));
                 flight.put("showstatus", _text(v.get("showstatus")).replaceAll("([a-z])([A-Z])", "$1 $2"));
                 flight.put("departureTime", _time(v.get("departureTime")));
                 flight.put("arrivalTime", _time(v.get("arrivalTime")));
