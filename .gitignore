@@ -31,3 +31,9 @@ test-results.claude/
 /.claude/
 /.cursor/
 /.gemini/
+EOD-2026-10-26.md
+
+# Ignore project documentation and images
+docs/PROJECT_FLOW.md
+docs/images/
+EOD-2026-10-26.md
