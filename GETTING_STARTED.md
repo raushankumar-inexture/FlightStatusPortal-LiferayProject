@@ -33,6 +33,33 @@ my-project $ blade gw deploy
 my-project $ blade server run
 ```
 
+## Flight email alerts
+
+Signed-in users can choose **Get email alerts** on a flight or manage followed
+flights from **My Alerts**. People who check in also follow their own flight
+automatically. The `flight-alerts` module checks flight status, delay and gate
+changes every 30 seconds and emails the address on the user's Liferay account.
+The last known state of every flight is saved in
+`<liferay home>/data/flight-alert-state.json`, so changes made while the server
+was stopped are reported after it starts.
+
+Emails are sent through any SMTP server. Set these environment variables for
+the Liferay process (for example in `bundles/tomcat/bin/setenv.sh`, which is not
+part of the repository) and restart Liferay:
+
+```
+export FLIGHT_ALERT_SMTP_HOST=smtp.gmail.com
+export FLIGHT_ALERT_SMTP_PORT=587
+export FLIGHT_ALERT_SMTP_STARTTLS=true
+export FLIGHT_ALERT_SMTP_USER=<mailbox>
+export FLIGHT_ALERT_SMTP_PASSWORD=<app password>
+export FLIGHT_ALERT_FROM_ADDRESS=<mailbox>
+```
+
+For Gmail, create an app password at `myaccount.google.com/apppasswords`. Never
+put these values in source control. If `TWILIO_EMAIL_FROM_ADDRESS` is set
+together with the Twilio account settings, Twilio Email is used instead.
+
 ## Running Liferay DXP in Docker
 
 ```
@@ -276,6 +303,29 @@ subprojects {
 	}
 }
 ```
+
+## SMS login code (optional, not active by default)
+
+The `flight-status-mfa` module is a Liferay multi-factor checker that asks
+Twilio Verify to send a one-time code by SMS and to check the code the user
+types. It is a separate module so the rest of the portal does not depend on
+Liferay's multi-factor bundles.
+
+Requirements:
+
+- Liferay's multi-factor modules must be installed and running. In the
+  development server used so far they are shipped in `osgi/portal` but are not
+  loaded, so this checker cannot start there (`lb | grep multi.factor` in the
+  Gogo shell shows nothing).
+- A Twilio Verify service, and these environment variables for the Liferay
+  process: `TWILIO_ACCOUNT_SID`, `TWILIO_VERIFY_SERVICE_SID` and either
+  `TWILIO_AUTH_TOKEN` or `TWILIO_API_KEY_SID` with `TWILIO_API_KEY_SECRET`.
+- A primary phone number in international format (for example `+919876543210`)
+  on every user's Liferay profile. A Twilio trial account can only send to
+  numbers verified in Twilio.
+
+Do not put any of these values in source control, and rotate any key that has
+been shared or exposed.
 
 ## platform.bndrun
 
