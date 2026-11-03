@@ -367,6 +367,43 @@ class FlightStatusApp extends HTMLElement {
 		});
 	}
 
+	// The bell: unread count, a list of flight changes, and a pop-up for news that arrived since the last visit.
+	bindBell(btn, panel) {
+		const badge = btn.querySelector('.fa-bellcount');
+		const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+		let seenTop = null;
+		try { seenTop = sessionStorage.getItem('faNoteTop'); } catch (e) {}
+		const load = async () => {
+			let list;
+			try { list = await this.json('/o/flight-alerts/notifications'); } catch (e) { return; }
+			const unread = list.filter((n) => !n.seen);
+			badge.textContent = unread.length > 9 ? '9+' : unread.length;
+			badge.hidden = !unread.length;
+			panel.innerHTML = '<div class="fa-notehead"><b>Notifications</b><button type="button" class="fa-markall">Mark all as read</button></div>' +
+				(list.length ? list.map((n) => `<a class="fa-note ${n.seen ? '' : 'new'}" href="${this._root}/flight-status"><b>${esc(n.flightNumber)}</b><span>${esc(n.message.replace(/ -> /g, ' → '))}</span><small>${ago(n.time)}</small></a>`).join('') : '<p class="fa-panelnote">No notifications yet.</p>');
+			panel.querySelector('.fa-markall').addEventListener('click', async () => { await getFetch()('/o/flight-alerts/notifications/read', {method: 'POST', credentials: 'include'}); load(); });
+			const top = list.reduce((m, n) => Math.max(m, n.id), 0);
+			const fresh = unread.filter((n) => seenTop !== null && n.id > Number(seenTop));
+			if (fresh.length) this.toast('<b>' + esc(fresh[0].flightNumber) + '</b> ' + esc(fresh[0].message.replace(/ -> /g, ' → ')) + (fresh.length > 1 ? ' (+' + (fresh.length - 1) + ' more)' : ''));
+			if (top) { seenTop = String(Math.max(Number(seenTop || 0), top)); try { sessionStorage.setItem('faNoteTop', seenTop); } catch (e) {} }
+		};
+		btn.addEventListener('click', (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; });
+		panel.addEventListener('click', (e) => e.stopPropagation());
+		document.addEventListener('click', () => { panel.hidden = true; });
+		clearInterval(this._bellTimer);
+		this._bellTimer = setInterval(load, 30000);
+		document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+		load();
+	}
+
+	toast(html) {
+		const t = document.createElement('div');
+		t.className = 'fa-toast';
+		t.innerHTML = '<span>' + ICONS.bell + '</span><div>' + html + '</div>';
+		this.appendChild(t);
+		setTimeout(() => t.remove(), 8000);
+	}
+
 	bindShell() {
 		const btn = this.querySelector('.fa-userbtn'), list = this.querySelector('.fa-usermenu-list');
 		if (btn && list) {
@@ -379,6 +416,8 @@ class FlightStatusApp extends HTMLElement {
 			document.addEventListener('click', close);
 			document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
 		}
+		const bell = this.querySelector('.fa-bell');
+		if (bell) this.bindBell(bell, this.querySelector('.fa-notes'));
 		this.querySelectorAll('[data-legal]').forEach((b) => b.addEventListener('click', () => this.legalDialog(b.dataset.legal)));
 		let accepted = false;
 		try { accepted = localStorage.getItem('faCookieNotice') === 'yes'; } catch (e) {}
@@ -770,6 +809,7 @@ class FlightStatusApp extends HTMLElement {
 				`<div class="fa-routehint-box"><span class="fa-hint fa-routehint"></span><div class="fa-createflight"></div></div>` +
 				`<div class="fa-two"><label>First name<input name="firstName" required value="${esc(item ? item.firstName : '')}" /></label>` +
 				`<label>Last name<input name="lastName" required value="${esc(item ? item.lastName : '')}" /></label></div>` +
+				`<label>Passenger email (optional, gives flight notifications)<input name="email" type="email" value="${esc(item ? item.email || '' : '')}" /></label>` +
 				`<div class="fa-two"><label>Class<select name="travelClass">${opt(Object.entries(CLASS_LABEL), classOf(item && item.travelClass))}</select></label>` +
 				`<label>Status<select name="bookingStatus">${opt([['Booked', 'Booked'], ['CheckedIn', 'Checked in'], ['Cancelled', 'Cancelled']], item ? item.bookingStatus : 'Booked')}</select></label></div>`;
 		} else {
@@ -857,7 +897,7 @@ class FlightStatusApp extends HTMLElement {
 				if (!picked) { err.textContent = 'Choose a flight for this date, or create it first.'; err.hidden = false; return; }
 				const pnrValue = form.pnr.value.trim().toUpperCase();
 				if (data.bookings.some((b) => b.pnr.toUpperCase() === pnrValue && (!item || b.id !== item.id))) { err.textContent = 'This booking code already exists.'; err.hidden = false; return; }
-				payload = {pnr: pnrValue, flightNumber: picked.flightNumber, flightId: String(picked.id), firstName: form.firstName.value.trim(), lastName: form.lastName.value.trim(), travelClass: form.travelClass.value, bookingStatus: form.bookingStatus.value};
+				payload = {pnr: pnrValue, flightNumber: picked.flightNumber, flightId: String(picked.id), email: form.email.value.trim(), firstName: form.firstName.value.trim(), lastName: form.lastName.value.trim(), travelClass: form.travelClass.value, bookingStatus: form.bookingStatus.value};
 			} else {
 				payload = Object.fromEntries(E.fields.map((f) => [f.k, form[f.k].value.trim()]));
 			}
@@ -892,7 +932,8 @@ class FlightStatusApp extends HTMLElement {
 		if (t.isSignedIn()) {
 			const name = t.getUserName() || 'Account';
 			const items = ROUTES.filter((r) => r.menu && r.auth).map((r) => `<a href="${root}/${r.slug}" class="${r.path === current ? 'active' : ''}">${r.label}</a>`).join('');
-			return '<div class="fa-usermenu"><button type="button" class="fa-userbtn" aria-haspopup="true" aria-expanded="false"><span class="fa-avatar">' + esc(name.trim().charAt(0).toUpperCase()) + '</span><span class="fa-uname">' + esc(name) + '</span><span class="fa-caret">&#9662;</span></button>' +
+			return '<div class="fa-bellwrap"><button type="button" class="fa-bell" aria-label="Notifications">' + ICONS.bell + '<span class="fa-bellcount" hidden></span></button><div class="fa-notes" hidden></div></div>' +
+				'<div class="fa-usermenu"><button type="button" class="fa-userbtn" aria-haspopup="true" aria-expanded="false"><span class="fa-avatar">' + esc(name.trim().charAt(0).toUpperCase()) + '</span><span class="fa-uname">' + esc(name) + '</span><span class="fa-caret">&#9662;</span></button>' +
 				'<div class="fa-usermenu-list" hidden><div class="fa-umhead">Signed in as<b>' + esc(name) + '</b></div>' + items +
 				`<a class="fa-logout" href="${t.getPathContext()}/c/portal/logout?referer=${encodeURIComponent(root + '/login')}">Logout</a></div></div>`;
 		}

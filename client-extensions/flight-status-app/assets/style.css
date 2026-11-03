@@ -581,3 +581,22 @@ flight-status-app .fa-routehint-box { display: grid; gap: .5rem; }
 flight-status-app .fa-createflight { display: flex; flex-wrap: wrap; gap: .5rem; }
 flight-status-app .fa-btn.fa-small { padding: .5rem .9rem; font-size: .85rem; }
 flight-status-app .fa-btn.ghost { background: #fff; color: var(--fa-blue); border: 1px solid #cfdcff; box-shadow: none; }
+
+/* notification bell and toast */
+flight-status-app .fa-bellwrap { position: relative; margin-left: .35rem; }
+flight-status-app .fa-bell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid rgba(255, 255, 255, .22); border-radius: 50%; background: rgba(255, 255, 255, .08); color: #fff; cursor: pointer; }
+flight-status-app .fa-bell:hover { background: rgba(255, 255, 255, .18); }
+flight-status-app .fa-bellcount { position: absolute; top: -4px; right: -4px; min-width: 18px; padding: 0 4px; border-radius: 999px; background: #e5484d; color: #fff; font-size: .7rem; font-weight: 800; line-height: 18px; text-align: center; }
+flight-status-app .fa-bellcount[hidden], flight-status-app .fa-notes[hidden] { display: none; }
+flight-status-app .fa-notes { position: absolute; right: 0; top: calc(100% + .5rem); z-index: 1100; width: 340px; max-height: 420px; overflow: auto; padding: .4rem; border-radius: 14px; background: #fff; box-shadow: 0 18px 44px rgba(8, 18, 50, .35); }
+flight-status-app .fa-notehead { display: flex; justify-content: space-between; align-items: center; padding: .5rem .7rem; border-bottom: 1px solid var(--fa-line); color: #0f1e50; }
+flight-status-app .fa-markall { border: 0; background: none; color: var(--fa-blue); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+flight-status-app .fa-note { display: grid; gap: .1rem; padding: .6rem .7rem; border-radius: 10px; color: #1c2434 !important; }
+flight-status-app .fa-note:hover { background: #f3f7ff; }
+flight-status-app .fa-note.new { background: #eef4ff; }
+flight-status-app .fa-note b { color: #0f1e50; }
+flight-status-app .fa-note span { color: #3b4559; font-size: .88rem; }
+flight-status-app .fa-note small { color: #8a94a8; font-size: .75rem; }
+flight-status-app .fa-toast { position: fixed; right: 1.2rem; top: 5.2rem; z-index: 1300; display: flex; gap: .7rem; align-items: center; max-width: 360px; padding: .9rem 1.1rem; border-radius: 14px; background: #0f1e50; color: #fff; box-shadow: 0 18px 44px rgba(8, 18, 50, .4); animation: fa-toastin .35s ease; }
+flight-status-app .fa-toast span { color: var(--fa-gold); }
+@keyframes fa-toastin { from { opacity: 0; transform: translateY(-10px); } }
