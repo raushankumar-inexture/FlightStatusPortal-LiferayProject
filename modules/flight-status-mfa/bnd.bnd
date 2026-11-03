@@ -1,0 +1,5 @@
+Bundle-Name: Flight Status SMS Verification
+Bundle-SymbolicName: com.flight.mfa
+Bundle-Version: 1.0.0
+Provide-Capability:\
+	liferay.resource.bundle;resource.bundle.base.name="content.Language"

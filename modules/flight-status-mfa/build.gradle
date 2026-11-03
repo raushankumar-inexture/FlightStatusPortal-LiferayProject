@@ -1,0 +1,5 @@
+dependencies {
+    compileOnly group: "com.liferay", name: "com.liferay.multi.factor.authentication.spi", version: "default"
+    compileOnly group: "com.liferay.portal", name: "release.dxp.api", version: "2026.q1.0"
+    compileOnly group: "jakarta.servlet", name: "jakarta.servlet-api", version: "6.0.0"
+}
