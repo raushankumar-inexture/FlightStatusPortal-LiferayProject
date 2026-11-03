@@ -600,3 +600,5 @@ flight-status-app .fa-note small { color: #8a94a8; font-size: .75rem; }
 flight-status-app .fa-toast { position: fixed; right: 1.2rem; top: 5.2rem; z-index: 1300; display: flex; gap: .7rem; align-items: center; max-width: 360px; padding: .9rem 1.1rem; border-radius: 14px; background: #0f1e50; color: #fff; box-shadow: 0 18px 44px rgba(8, 18, 50, .4); animation: fa-toastin .35s ease; }
 flight-status-app .fa-toast span { color: var(--fa-gold); }
 @keyframes fa-toastin { from { opacity: 0; transform: translateY(-10px); } }
+flight-status-app .fa-notes { overflow-x: hidden; }
+flight-status-app .fa-note span { white-space: normal; overflow-wrap: anywhere; }
