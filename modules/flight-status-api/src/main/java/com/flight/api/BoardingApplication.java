@@ -213,8 +213,9 @@ public class BoardingApplication extends Application {
                 }
 
                 String flightNumber = String.valueOf(b.get("flightNumber"));
+                String flightKey = _flightKey(b);
 
-                ObjectEntry flight = _findFlight(siteId, flightNumber);
+                ObjectEntry flight = _findFlight(siteId, flightNumber, _flightId(b));
 
                 if (flight == null) {
                     return _error(404, "Flight not found");
@@ -226,7 +227,7 @@ public class BoardingApplication extends Application {
                     return _error(409, "This flight has already landed");
                 }
 
-                if (_takenSeats(siteId, flightNumber).toString().contains("\"" + seat + "\"")) {
+                if (_takenSeats(siteId, flightKey).toString().contains("\"" + seat + "\"")) {
                     return _error(409, "Seat just taken, choose another");
                 }
 
@@ -241,7 +242,7 @@ public class BoardingApplication extends Application {
 
                 Map<String, Serializable> reservation = new HashMap<>();
 
-                reservation.put("flightNumber", flightNumber);
+                reservation.put("flightNumber", flightKey);
                 reservation.put("seat", seat);
 
                 _add("C_SeatReservation", siteId, user, reservation);
@@ -250,6 +251,7 @@ public class BoardingApplication extends Application {
 
                 pass.put("pnr", String.valueOf(b.get("pnr")));
                 pass.put("flightNumber", flightNumber);
+                pass.put("flightId", String.valueOf(flight.getObjectEntryId()));
                 pass.put("passengerName", b.get("firstName") + " " + b.get("lastName"));
                 pass.put("seat", seat);
                 pass.put("travelClass", travelClass);
@@ -294,6 +296,8 @@ public class BoardingApplication extends Application {
 
         json.put("pnr", String.valueOf(b.get("pnr")));
         json.put("flightNumber", String.valueOf(b.get("flightNumber")));
+        json.put("flightKey", _flightKey(b));
+        json.put("flightId", _flightId(b));
         json.put("passengerName", b.get("firstName") + " " + b.get("lastName"));
         json.put("travelClass", _travelClass(b));
 
@@ -394,14 +398,32 @@ public class BoardingApplication extends Application {
         return Response.status(status).entity(json.toString()).build();
     }
 
-    private ObjectEntry _findFlight(long siteId, String flightNumber) throws Exception {
+    /** The flight a booking is for: the exact flight when the booking names one, otherwise the first with that number. */
+    private ObjectEntry _findFlight(long siteId, String flightNumber, String flightId) throws Exception {
         for (ObjectEntry entry : _entries("C_Flight", siteId)) {
-            if (flightNumber.equals(String.valueOf(entry.getValues().get("flightNumber")))) {
+            if (!flightNumber.equals(String.valueOf(entry.getValues().get("flightNumber")))) {
+                continue;
+            }
+
+            if (flightId.isEmpty() || flightId.equals(String.valueOf(entry.getObjectEntryId()))) {
                 return entry;
             }
         }
 
         return null;
+    }
+
+    private String _flightId(Map<String, Serializable> booking) {
+        Object id = booking.get("flightId");
+
+        return ((id == null) || "null".equals(String.valueOf(id))) ? "" : String.valueOf(id).trim();
+    }
+
+    /** Seats are kept per flight: number plus id for dated flights, the number alone for older bookings. */
+    private String _flightKey(Map<String, Serializable> booking) {
+        String id = _flightId(booking);
+
+        return String.valueOf(booking.get("flightNumber")) + (id.isEmpty() ? "" : "#" + id);
     }
 
     /** Gates are shared out between flights so every pass shows one. */
