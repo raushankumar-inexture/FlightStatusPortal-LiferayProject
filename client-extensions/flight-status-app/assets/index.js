@@ -96,7 +96,7 @@ const logoHtml = (flightNumber, airline, cls) => {
 };
 const CLASS_LABEL = {First: 'First Class', Business: 'Business Class', Economy: 'Economy Class'};
 const CLASS_ROWS = {First: [1, 2], Business: [3, 6], Economy: [7, 20]};
-const seatSvg = (c) => '<svg class="fa-sv ' + c + '" viewBox="0 0 24 24" aria-hidden="true"><rect class="bk" x="4" y="2" width="16" height="13" rx="4"/><rect class="cs" x="2" y="17" width="20" height="5" rx="2.5"/></svg>';
+const seatSvg = (c) => '<svg class="fa-sv ' + c + '" viewBox="0 0 24 24" aria-hidden="true"><rect class="bk" x="4" y="2" width="16" height="13" rx="4"/><rect class="cs" x="2" y="17" width="20" height="5" rx="2.5"/><rect class="gl" x="7" y="4" width="10" height="3.5" rx="1.75"/></svg>';
 // Extra fee in rupees (the server works out the real price): first row of a class = legroom, A/F window, C/D aisle
 const seatFee = (id) => { const r = parseInt(id, 10), c = id.slice(-1); return [1, 3, 7].includes(r) ? 500 : 'AF'.includes(c) ? 300 : 'CD'.includes(c) ? 200 : 0; };
 const classOf = (v) => (CLASS_LABEL[v] ? v : 'Economy');
