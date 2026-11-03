@@ -96,6 +96,9 @@ const logoHtml = (flightNumber, airline, cls) => {
 };
 const CLASS_LABEL = {First: 'First Class', Business: 'Business Class', Economy: 'Economy Class'};
 const CLASS_ROWS = {First: [1, 2], Business: [3, 6], Economy: [7, 20]};
+const seatSvg = (c) => '<svg class="fa-sv ' + c + '" viewBox="0 0 24 24" aria-hidden="true"><rect class="bk" x="4" y="2" width="16" height="13" rx="4"/><rect class="cs" x="2" y="17" width="20" height="5" rx="2.5"/></svg>';
+// Extra fee in rupees (the server works out the real price): first row of a class = legroom, A/F window, C/D aisle
+const seatFee = (id) => { const r = parseInt(id, 10), c = id.slice(-1); return [1, 3, 7].includes(r) ? 500 : 'AF'.includes(c) ? 300 : 'CD'.includes(c) ? 200 : 0; };
 const classOf = (v) => (CLASS_LABEL[v] ? v : 'Economy');
 const statusClass = (s) => String(s).toLowerCase().replace(/[^a-z]/g, '');
 
@@ -252,7 +255,7 @@ class FlightStatusApp extends HTMLElement {
 		const tab = params.get('tab') || 'dashboard';
 		this._adminTab = tab;
 		const links = adminMode
-			? [['dashboard', 'Dashboard'], ['flights', 'Flights'], ['airports', 'Airports'], ['gates', 'Gates']]
+			? [['dashboard', 'Dashboard'], ['flights', 'Flights'], ['airports', 'Airports'], ['gates', 'Gates'], ['reservations', 'Reservations']]
 				.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${current === 'admin' && tab === t[0] ? 'active' : ''}">${t[1]}</a>`).join('') +
 				`<a href="${root}/live-map" class="${current === 'live' ? 'active' : ''}">Live Map</a>` +
 				`<a class="fa-auth" href="${root}/home?viewsite=1">View site</a>`
@@ -716,8 +719,10 @@ class FlightStatusApp extends HTMLElement {
 			this.json(ENT.flights.list), this.json(ENT.airports.list), this.json(ENT.gates.list), this.json(ENT.bookings.list),
 		]);
 		const airports = airportsRaw.items, gates = gatesRaw.items, flights = flightsRaw.items, bookings = bookingsRaw.items;
+		let passes = [], reservations = [];
+		if (tab === 'reservations') { try { passes = (await this.json('/o/c/boardingpasses/scopes/' + SITE_ID() + '?pageSize=200')).items || []; } catch (e) {} }
 		const apById = Object.fromEntries(airports.map((a) => [a.id, a]));
-		const tabs = [['dashboard', 'Dashboard'], ['flights', 'Flights (' + flights.length + ')'], ['airports', 'Airports (' + airports.length + ')'], ['gates', 'Gates (' + gates.length + ')'], ['bookings', 'Bookings (' + bookings.length + ')']];
+		const tabs = [['dashboard', 'Dashboard'], ['flights', 'Flights (' + flights.length + ')'], ['airports', 'Airports (' + airports.length + ')'], ['gates', 'Gates (' + gates.length + ')'], ['bookings', 'Bookings (' + bookings.length + ')'], ['reservations', 'Reservations']];
 
 		let body = '';
 		if (tab === 'dashboard') {
@@ -728,10 +733,10 @@ class FlightStatusApp extends HTMLElement {
 				'<div class="fa-adminbtns"><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button><button class="fa-btn block-auto" data-add="airports">+ Add Airport</button><button class="fa-btn block-auto" data-add="gates">+ Add Gate</button><button class="fa-btn block-auto" data-add="bookings">+ Add Booking</button></div>';
 		} else if (tab === 'flights') {
 			body = '<div class="fa-head"><h2>Flights</h2><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button></div>' +
-				this.adminTable(['Flight', 'Route', 'Departure', 'Status', 'Delay'], flights.map((f) => {
+				this.adminTable(['Flight', 'Route', 'Departure', 'Status', 'Delay', 'Bookings'], flights.map((f) => {
 					const o = apById[f.r_originAirport_c_airportId], d = apById[f.r_destinationAirport_c_airportId];
 					return [f.id, [esc(f.flightNumber) + (airlineOf(f.flightNumber, f.airline) ? '<br><small>' + esc(airlineOf(f.flightNumber, f.airline)) + '</small>' : ''), esc((o ? o.code : '?') + ' → ' + (d ? d.code : '?')), fmtDate(f.departureTime) + ' ' + fmtTime(f.departureTime),
-						'<span class="fa-badge ' + statusClass(f.showstatus ? f.showstatus.name : '') + '">' + esc(f.showstatus ? f.showstatus.name : '') + '</span>', (f.delayMinutes || 0) + ' min']];
+						'<span class="fa-badge ' + statusClass(f.showstatus ? f.showstatus.name : '') + '">' + esc(f.showstatus ? f.showstatus.name : '') + '</span>', (f.delayMinutes || 0) + ' min', String(bookings.filter((b) => String(b.flightId) === String(f.id) || (!b.flightId && b.flightNumber === f.flightNumber)).length)]];
 				}));
 		} else if (tab === 'bookings') {
 			body = '<div class="fa-head"><h2>Bookings</h2><button class="fa-btn block-auto" data-add="bookings">+ Add Booking</button></div>' +
@@ -742,6 +747,28 @@ class FlightStatusApp extends HTMLElement {
 						esc(o && d ? o.code + ' → ' + d.code : '?'), esc(CLASS_LABEL[classOf(b.travelClass)]),
 						'<span class="fa-badge ' + (b.bookingStatus === 'CheckedIn' ? 'landed' : b.bookingStatus === 'Cancelled' ? 'delayed' : 'ontime') + '">' + esc(b.bookingStatus === 'CheckedIn' ? 'Checked in' : b.bookingStatus) + '</span>']];
 				}));
+		} else if (tab === 'reservations') {
+			// One list of who booked which flight: every booking, plus passes whose booking was deleted
+			const used = new Set(), pairs = [];
+			bookings.forEach((b) => { const p = passes.find((x) => x.pnr === b.pnr); if (p) used.add(p.id); pairs.push([b, p]); });
+			passes.forEach((p) => { if (!used.has(p.id)) pairs.push([null, p]); });
+			reservations = pairs.map(([b, p]) => {
+				const num = b ? b.flightNumber : p.flightNumber;
+				const f = flights.find((x) => String(x.id) === String((b && b.flightId) || (p && p.flightId))) || flights.find((x) => x.flightNumber === num) || {};
+				const o = apById[f.r_originAirport_c_airportId], d = apById[f.r_destinationAirport_c_airportId], dep = f.departureTime || (p && p.departureTime) || '';
+				return {pnr: b ? b.pnr : p.pnr, name: b ? b.firstName + ' ' + b.lastName : p.passengerName, account: p && p.creator ? p.creator.name : '', email: (p && p.passengerEmail) || (b && b.email) || '',
+					flight: num, air: airlineOf(num, f.airline) || '', dep, ts: Date.parse(dep) || 0, route: o && d ? o.code + ' → ' + d.code : p ? p.origin + ' → ' + p.destination : '?',
+					cls: CLASS_LABEL[classOf(b ? b.travelClass : p.travelClass)], seat: p ? p.seat : '', status: !b ? 'Booking deleted' : p ? 'Checked in' : 'Booked', created: Date.parse((b || p).dateCreated) || 0};
+			});
+			const count = (s) => reservations.filter((r) => r.status === s).length;
+			const heads = [['Passenger', 'name'], ['Account', 'account'], ['Flight', 'flight'], ['Departure', 'ts'], ['Route', 'route'], ['Class', 'cls'], ['Seat', 'seat'], ['PNR', 'pnr'], ['Status', 'status']];
+			body = '<div class="fa-head"><h2>Reservations</h2></div><div class="fa-rescards">' +
+				[['Total', reservations.length], ['Checked in', count('Checked in')], ['Not checked in', count('Booked')], ['Booking deleted', count('Booking deleted')]].map((c) => '<div><b>' + c[1] + '</b><span>' + c[0] + '</span></div>').join('') + '</div>' +
+				'<div class="fa-resbar"><input class="fa-resq" type="search" placeholder="Search name, email, account, PNR or flight" />' +
+				'<select class="fa-resflight"><option value="">All flights</option>' + [...new Set(reservations.map((r) => r.flight))].sort().map((n) => '<option>' + esc(n) + '</option>').join('') + '</select>' +
+				'<select class="fa-resstatus"><option value="">All statuses</option><option>Booked</option><option>Checked in</option><option>Booking deleted</option></select>' +
+				'<input class="fa-resdate" type="date" title="Departure date" /><button class="fa-chip fa-resclear" type="button">Clear</button><span class="fa-rescount"></span></div>' +
+				'<div class="fa-tablewrap"><table class="fa-table"><thead><tr>' + heads.map((h) => '<th data-s="' + h[1] + '" class="fa-sortable">' + h[0] + '</th>').join('') + '</tr></thead><tbody></tbody></table></div><div class="fa-msg fa-resempty" hidden>No reservations match.</div>';
 		} else {
 			const E = ENT[tab], items = tab === 'airports' ? airports : gates;
 			body = '<div class="fa-head"><h2>' + E.plural + '</h2><button class="fa-btn block-auto" data-add="' + tab + '">+ Add ' + E.label + '</button></div>' +
@@ -751,6 +778,7 @@ class FlightStatusApp extends HTMLElement {
 		view.innerHTML = '<div class="fa-title"><h1>Admin Portal</h1><p>Manage flights, airports, gates and bookings. Changes appear on the public pages straight away.</p></div>' +
 			(notice ? `<div class="fa-notice ${notice.error ? 'error' : ''}">${esc(notice.text)}</div>` : '') + body;
 
+		if (tab === 'reservations') this.bindReservations(view, reservations);
 		view.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => this.adminForm(view, b.dataset.add, null, {airports, flights, gates, bookings})));
 		view.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
 			const list = tab === 'flights' ? flights : tab === 'airports' ? airports : tab === 'bookings' ? bookings : gates;
@@ -766,6 +794,26 @@ class FlightStatusApp extends HTMLElement {
 				await this.renderAdmin(view, tab, {error: true, text: 'Could not delete: ' + e.message + (tab === 'airports' ? ' (an airport used by flights cannot be deleted)' : '')});
 			}
 		}));
+	}
+
+	bindReservations(view, rows) {
+		const q = view.querySelector('.fa-resq'), fl = view.querySelector('.fa-resflight'), st = view.querySelector('.fa-resstatus'), dt = view.querySelector('.fa-resdate');
+		let sort = 'created', dir = -1;
+		const draw = () => {
+			const t = q.value.trim().toLowerCase();
+			const list = rows.filter((r) => (!t || [r.pnr, r.name, r.account, r.email, r.flight, r.air].join(' ').toLowerCase().includes(t)) && (!fl.value || r.flight === fl.value) && (!st.value || r.status === st.value) &&
+				(!dt.value || (r.dep && new Date(r.dep).toLocaleDateString('en-CA') === dt.value))).sort((a, b) => (a[sort] > b[sort] ? 1 : a[sort] < b[sort] ? -1 : 0) * dir);
+			view.querySelector('tbody').innerHTML = list.map((r) => '<tr><td>' + esc(r.name) + (r.email ? '<br><small>' + esc(r.email) + '</small>' : '') + '</td><td>' + (r.account ? esc(r.account) : '-') + '</td>' +
+				'<td>' + esc(r.flight) + (r.air ? '<br><small>' + esc(r.air) + '</small>' : '') + '</td><td>' + (r.dep ? esc(fmtDate(r.dep) + ' ' + fmtTime(r.dep)) : '?') + '</td><td>' + esc(r.route) + '</td><td>' + esc(r.cls) + '</td>' +
+				'<td>' + (r.seat ? esc(r.seat) + (seatFee(r.seat) ? ' <small>(&#8377;' + seatFee(r.seat) + ' seat)</small>' : '') : '-') + '</td><td>' + esc(r.pnr) + '</td>' +
+				'<td><span class="fa-badge ' + (r.status === 'Checked in' ? 'landed' : r.status === 'Booked' ? 'ontime' : 'delayed') + '">' + esc(r.status) + '</span></td></tr>').join('');
+			view.querySelector('.fa-rescount').textContent = 'Showing ' + list.length + ' of ' + rows.length;
+			view.querySelector('.fa-resempty').hidden = !!list.length;
+		};
+		[q, fl, st, dt].forEach((el) => el.addEventListener('input', draw));
+		view.querySelector('.fa-resclear').addEventListener('click', () => { q.value = fl.value = st.value = dt.value = ''; draw(); });
+		view.querySelectorAll('th[data-s]').forEach((th) => th.addEventListener('click', () => { dir = sort === th.dataset.s ? -dir : 1; sort = th.dataset.s; draw(); }));
+		draw();
 	}
 
 	adminTable(headers, rows) {
@@ -1363,13 +1411,13 @@ class FlightStatusApp extends HTMLElement {
 			code.make();
 			qr = code.createSvgTag(4);
 		} catch (e) {}
-		return `<div class="fa-pass"><div class="fa-pass-top"><span>${ICONS.plane} Flight Status Portal</span><b>BOARDING PASS${p.travelClass && p.travelClass !== 'null' ? ' &middot; ' + esc(CLASS_LABEL[classOf(p.travelClass)]).toUpperCase() : ''}</b></div>` +
+		return `<div class="fa-pass"><div class="fa-pass-top"><span>${ICONS.plane} Flight Status Portal</span><b>${seatFee(p.seat) ? '<i class="fa-paidbadge">Paid seat &#8377;' + seatFee(p.seat) + '</i>' : ''}BOARDING PASS${p.travelClass && p.travelClass !== 'null' ? ' &middot; ' + esc(CLASS_LABEL[classOf(p.travelClass)]).toUpperCase() : ''}</b></div>` +
 			`<div class="fa-pass-body"><div class="fa-pass-main">` +
 			`<div class="fa-pass-route"><div><b>${esc(p.origin)}</b><span>${esc(p.originCity)}</span></div><i>${ICONS.plane}</i><div><b>${esc(p.destination)}</b><span>${esc(p.destinationCity)}</span></div></div>` +
 			`<div class="fa-pass-grid"><div><span>Passenger</span><b>${esc(p.passengerName)}</b></div><div><span>Flight</span><b>${esc(p.flightNumber)}</b></div><div><span>Airline</span><b class="fa-airlinecell">${logoHtml(p.flightNumber, (this._airlines && this._airlines[p.flightNumber]) || '')}${esc((this._airlines && this._airlines[p.flightNumber]) || airlineOf(p.flightNumber, '') || '-')}</b></div>` +
 			`<div><span>Date</span><b>${esc(fmtDate(p.departureTime))}</b></div><div><span>Departs</span><b>${fmtTime(p.departureTime)}</b></div>` +
 			`<div><span>Boarding</span><b>${esc(boarding)}</b></div><div><span>Gate</span><b>${esc(p.gate)}</b></div>` +
-			`<div><span>Seat</span><b>${esc(p.seat)}</b></div><div><span>PNR</span><b>${esc(p.pnr)}</b></div>` +
+			`<div><span>Seat</span><b>${esc(p.seat)}${seatFee(p.seat) ? ' <small>(paid &#8377;' + seatFee(p.seat) + ')</small>' : ''}</b></div><div><span>PNR</span><b>${esc(p.pnr)}</b></div>` +
 			`<div><span>Class</span><b>${esc(p.travelClass && p.travelClass !== 'null' ? CLASS_LABEL[classOf(p.travelClass)] : 'Economy Class')}</b></div></div></div>` +
 			`<div class="fa-pass-qr">${qr}<span>${esc(p.pnr)}</span></div></div></div>`;
 	}
@@ -1392,6 +1440,12 @@ class FlightStatusApp extends HTMLElement {
 			try { data = await res.json(); } catch (e) {}
 			if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
 			return data;
+		};
+		// Paid seat: server makes a Stripe Checkout page, we go there, Stripe sends the user back with a session_id, and the server checks it at /pass
+		const payForSeat = async (b, lastName) => {
+			const order = await call('POST', '/payment/order', {siteId: site, pnr: b.pnr, lastName, seat, returnUrl: location.origin + location.pathname});
+			location.href = order.url;
+			return new Promise(() => {});
 		};
 		const printPass = () => {
 			document.body.classList.add('fa-print-mode');
@@ -1418,10 +1472,11 @@ class FlightStatusApp extends HTMLElement {
 
 		const drawNew = (box) => {
 			seat = '';
-			box.innerHTML = '<form class="fa-bpform fa-find"><p class="fa-hint">Enter the booking code (PNR) and last name from your ticket to check in.</p>' +
-				'<div class="fa-two"><label>Booking code (PNR)<input name="pnr" required maxlength="12" placeholder="e.g. K7QX2M" autocomplete="off" /></label>' +
-				'<label>Last name<input name="lastName" required maxlength="40" autocomplete="off" /></label></div>' +
-				'<div class="fa-error" hidden></div><button class="fa-btn" type="submit">Find my booking</button></form><div class="fa-bpstep"></div><div class="fa-bpresult"></div>';
+			box.innerHTML = '<form class="fa-bpform fa-find fa-findbar">' +
+					'<label>Booking code (PNR)<input name="pnr" required maxlength="12" placeholder="e.g. K7QX2M" autocomplete="off" /></label>' +
+					'<label>Last name<input name="lastName" required maxlength="40" autocomplete="off" /></label>' +
+					'<button class="fa-btn" type="submit">Find my booking</button><div class="fa-error" hidden></div></form>' +
+					'<div class="fa-bpstep"></div><div class="fa-bpresult"></div>';
 			const find = box.querySelector('.fa-find'), findErr = find.querySelector('.fa-error'), step = box.querySelector('.fa-bpstep');
 			const wanted = new URLSearchParams(location.search);
 			if (wanted.get('pnr') && wanted.get('last')) {
@@ -1448,14 +1503,18 @@ class FlightStatusApp extends HTMLElement {
 
 		const drawCheckin = (box, step, b, lastName) => {
 			const f = flights.find((x) => String(x.id) === String(b.flightId)) || flights.find((x) => x.flightNumber === b.flightNumber);
-			step.innerHTML = '<form class="fa-bpform"><div class="fa-found"><b>Booking found</b><span>' + esc(b.passengerName) + ' &middot; ' + esc(f ? label(f) : b.flightNumber) + ' &middot; <b>' + esc(CLASS_LABEL[classOf(b.travelClass)]) + '</b></span></div>' +
-				'<div class="fa-seatwrap"><b>Choose your seat: <span class="fa-seatpick">none</span></b><div class="fa-seats"></div>' +
-				'<p class="fa-seatkey"><i class="free"></i> Free <i class="taken"></i> Taken <i class="mine"></i> Your seat</p></div>' +
-				'<div class="fa-error" hidden></div><button class="fa-btn" type="submit">Check in and get boarding pass</button></form>';
+			const o = f ? (ap[f.originAirportId] || {}) : {}, d = f ? (ap[f.destinationAirportId] || {}) : {};
+				const kv = (k, v) => '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>';
+				step.innerHTML = '<form class="fa-bpform fa-ckform"><div class="fa-ckcard fa-ckside"><h3>Seat Selection</h3><dl class="fa-kv">' + kv('Passenger', esc(b.passengerName)) + kv('Flight', esc(b.flightNumber) + (f && f.airline ? ' &middot; ' + esc(f.airline) : '')) +
+					kv('Route', f ? esc((o.code || '?') + ' \u2192 ' + (d.code || '?')) : '-') + kv('Departs', f ? esc(fmtDate(f.departureTime) + ' \u00b7 ' + fmtTime(f.departureTime)) : '-') + kv('Class', esc(CLASS_LABEL[classOf(b.travelClass)])) + kv('PNR', esc(b.pnr)) + '</dl>' +
+					'<h4>Seats</h4><div class="fa-key">' + [['', 'Available'], ['paid', 'Paid seat'], ['leg', 'Extra legroom'], ['taken', 'Occupied'], ['mine', 'Your seat']].map((k) => '<span>' + seatSvg(k[0]) + k[1] + '</span>').join('') + '</div>' +
+					'<h4>Seat prices</h4><table class="fa-fees"><tr><td>Extra legroom (first row of a class)</td><td>&#8377;500</td></tr><tr><td>Window seat</td><td>&#8377;300</td></tr><tr><td>Aisle seat</td><td>&#8377;200</td></tr><tr><td>Middle seat</td><td>Free</td></tr></table>' +
+					'<div class="fa-summary"></div><div class="fa-error" hidden></div><button class="fa-btn" type="submit">Check in and get boarding pass</button></div>' +
+					'<div class="fa-ckcard fa-plane"><h3>' + esc(b.flightNumber) + ' &middot; Cabin</h3><div class="fa-seats"></div></div></form>';
 			const form = step.querySelector('form'), err = form.querySelector('.fa-error'), grid = form.querySelector('.fa-seats');
 
 			const drawSeats = () => {
-				let html = '';
+				let html = '<div class="fa-seatrow fa-seathead"><span></span>' + 'ABCDEF'.split('').map((c, i) => (i === 3 ? '<em></em>' : '') + '<b>' + c + '</b>').join('') + '</div>';
 				const mine = CLASS_ROWS[classOf(b.travelClass)];
 				for (let r = 1; r <= 20; r++) {
 					const zone = Object.entries(CLASS_ROWS).find((z) => z[1][0] === r);
@@ -1463,19 +1522,28 @@ class FlightStatusApp extends HTMLElement {
 					const inClass = r >= mine[0] && r <= mine[1];
 					html += '<div class="fa-seatrow"><span>' + r + '</span>' + 'ABCDEF'.split('').map((c, i) => {
 						const id = r + c, isTaken = taken.includes(id), off = isTaken || !inClass;
-						return (i === 3 ? '<em></em>' : '') + `<button type="button" class="fa-seat ${isTaken ? 'taken' : ''} ${!inClass ? 'other' : ''} ${seat === id ? 'mine' : ''}" data-s="${id}" ${off ? 'disabled' : ''}>${c}</button>`;
+						return (i === 3 ? '<em></em>' : '') + `<button type="button" class="fa-seat ${isTaken ? 'taken' : ''} ${!inClass ? 'other' : ''} ${seat === id ? 'mine' : ''} ${seatFee(id) ? 'paid' : ''} ${[1, 3, 7].includes(r) ? 'leg' : ''}" data-s="${id}" title="Seat ${id} \u00b7 ${seatFee(id) ? 'Extra Rs ' + seatFee(id) : 'Free'}" aria-label="Seat ${id}" ${off ? 'disabled' : ''}>${seatSvg('')}</button>`;
 					}).join('') + '</div>';
 				}
+				const keep = grid.scrollTop;
 				grid.innerHTML = html;
-				form.querySelector('.fa-seatpick').textContent = seat || 'none';
+				grid.scrollTop = keep;
+				const fee = seat ? seatFee(seat) : 0, r = parseInt(seat, 10), kind = [1, 3, 7].includes(r) ? 'Extra legroom' : 'AF'.includes(seat.slice(-1)) ? 'Window' : 'CD'.includes(seat.slice(-1)) ? 'Aisle' : 'Middle';
+					form.querySelector('.fa-summary').innerHTML = seat ? '<span>Your seat</span><b>' + seat + '</b><small>' + kind + '</small><em>' + (fee ? 'Extra &#8377;' + fee : 'Free') + '</em>' : '<span>Pick a seat on the plane</span>';
+					form.querySelector('button[type=submit]').textContent = fee ? 'Pay \u20b9' + fee + ' and check in' : 'Check in and get boarding pass';
 				grid.querySelectorAll('.fa-seat:not(.taken):not(.other)').forEach((btn) => btn.addEventListener('click', () => { seat = btn.dataset.s; drawSeats(); }));
 			};
 			const loadSeats = async () => {
 				try { taken = await call('GET', '/seats?siteId=' + site + '&flight=' + encodeURIComponent(b.flightKey || b.flightNumber)); } catch (e) { taken = []; }
 				if (taken.includes(seat)) seat = '';
 				drawSeats();
+				const mineZone = Array.from(grid.querySelectorAll('.fa-seatzone')).find((z) => z.textContent.includes('your class'));
+				if (mineZone && !grid.scrollTop) grid.scrollTop = Math.max(0, mineZone.offsetTop - 44);
 			};
 			loadSeats();
+			// Back from Stripe: pick the paid seat again and finish the check-in
+			let sessionId = new URLSearchParams(location.search).get('session_id');
+			if (sessionId) { seat = new URLSearchParams(location.search).get('seat') || ''; history.replaceState(null, '', location.pathname); setTimeout(() => form.requestSubmit(), 400); }
 
 			form.addEventListener('submit', async (e) => {
 				e.preventDefault();
@@ -1484,13 +1552,15 @@ class FlightStatusApp extends HTMLElement {
 				const btn = form.querySelector('button[type=submit]');
 				btn.disabled = true;
 				try {
-					const pass = await call('POST', '/pass', {siteId: site, pnr: b.pnr, lastName, seat});
+					const pay = sessionId ? {sessionId} : seatFee(seat) ? await payForSeat(b, lastName) : {};
+					const pass = await call('POST', '/pass', {siteId: site, pnr: b.pnr, lastName, seat, ...pay});
 					step.innerHTML = '';
 					showPass(box.querySelector('.fa-bpresult'), pass);
 				} catch (x) {
 					err.textContent = x.message;
 					err.hidden = false;
 					btn.disabled = false;
+					sessionId = '';
 					loadSeats();
 				}
 			});

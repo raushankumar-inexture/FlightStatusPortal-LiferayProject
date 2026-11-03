@@ -16,6 +16,8 @@ import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import com.liferay.portal.kernel.servlet.PortalSessionContext;
 import com.liferay.portal.kernel.util.PortalUtil;
+import com.liferay.portal.kernel.util.PropsKeys;
+import com.liferay.portal.kernel.util.PropsUtil;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -31,12 +33,23 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import java.io.InputStream;
 import java.io.Serializable;
+
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
 
 import java.security.SecureRandom;
 
 import java.text.SimpleDateFormat;
 
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -212,6 +225,12 @@ public class BoardingApplication extends Application {
                     return _error(400, "That seat is not in your " + travelClass + " class");
                 }
 
+                int fee = _seatFee(seat);
+
+                if ((fee > 0) && !_paid(input, String.valueOf(b.get("pnr")), seat, fee)) {
+                    return _error(402, "Payment for this seat was not completed");
+                }
+
                 String flightNumber = String.valueOf(b.get("flightNumber"));
                 String flightKey = _flightKey(b);
 
@@ -286,6 +305,154 @@ public class BoardingApplication extends Application {
             _log.error("Could not create the boarding pass", exception);
 
             return _error(500, "Could not create the boarding pass");
+        }
+    }
+
+    /** Creates a Stripe Checkout session for a paid seat. The price is worked out here, never taken from the browser. */
+    @Consumes(MediaType.APPLICATION_JSON)
+    @POST
+    @Path("/payment/order")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response paymentOrder(@Context HttpServletRequest request, String body) {
+        try {
+            if (_user(request) == null) {
+                return _error(401, "Please log in");
+            }
+
+            try {
+                AuthTokenUtil.checkCSRFToken(request, BoardingApplication.class.getName());
+            }
+            catch (PrincipalException principalException) {
+                return _error(403, "Please refresh the page and try again");
+            }
+
+            JSONObject input = JSONFactoryUtil.createJSONObject(body);
+
+            long siteId = input.getLong("siteId");
+            String seat = input.getString("seat").trim().toUpperCase();
+            String returnUrl = input.getString("returnUrl");
+
+            ObjectEntry booking = _findBooking(siteId, input.getString("pnr"), input.getString("lastName"));
+
+            if ((booking == null) || (_bookingProblem(booking) != null) ||
+                !seat.matches("(?:[1-9]|1[0-9]|20)[A-F]") || !_seatInClass(seat, _travelClass(booking.getValues())) ||
+                _takenSeats(siteId, _flightKey(booking.getValues())).toString().contains("\"" + seat + "\"")) {
+
+                return _error(409, "This seat cannot be booked");
+            }
+
+            int fee = _seatFee(seat);
+
+            if (fee == 0) {
+                return _error(400, "This seat is free, no payment needed");
+            }
+
+            String pnr = String.valueOf(booking.getValues().get("pnr"));
+
+            String back = returnUrl + "?pnr=" + _enc(pnr) + "&last=" + _enc(input.getString("lastName"));
+
+            JSONObject session = _stripe(
+                "POST", "/checkout/sessions",
+                "mode=payment&success_url=" + _enc(back + "&seat=" + seat + "&session_id={CHECKOUT_SESSION_ID}") +
+                    "&cancel_url=" + _enc(back) + "&line_items[0][quantity]=1&line_items[0][price_data][currency]=inr" +
+                        "&line_items[0][price_data][unit_amount]=" + (fee * 100) +
+                            "&line_items[0][price_data][product_data][name]=" + _enc("Seat " + seat) +
+                                "&metadata[pnr]=" + _enc(pnr) + "&metadata[seat]=" + seat);
+
+            if (!session.has("url")) {
+                return _error(502, "Could not start the payment");
+            }
+
+            JSONObject out = JSONFactoryUtil.createJSONObject();
+
+            out.put("url", session.getString("url"));
+
+            return Response.ok(out.toString()).build();
+        }
+        catch (Exception exception) {
+            _log.error("Could not create the payment session", exception);
+
+            return _error(500, "Could not start the payment");
+        }
+    }
+
+    /** Extra fee in rupees: first row of a class is extra legroom, A/F window, C/D aisle, B/E middle is free. */
+    private static int _seatFee(String seat) {
+        int row = Integer.parseInt(seat.substring(0, seat.length() - 1));
+        char letter = seat.charAt(seat.length() - 1);
+
+        if ((row == 1) || (row == 3) || (row == 7)) {
+            return 500;
+        }
+
+        if ((letter == 'A') || (letter == 'F')) {
+            return 300;
+        }
+
+        return ((letter == 'C') || (letter == 'D')) ? 200 : 0;
+    }
+
+    /** True when Stripe says this session is paid, for this PNR and seat, with the right amount. */
+    private boolean _paid(JSONObject input, String pnr, String seat, int fee) throws Exception {
+        String sessionId = input.getString("sessionId");
+
+        if (!sessionId.matches("cs_[A-Za-z0-9_]+")) {
+            return false;
+        }
+
+        JSONObject session = _stripe("GET", "/checkout/sessions/" + sessionId, null);
+        JSONObject metadata = session.getJSONObject("metadata");
+
+        if (!"paid".equals(session.getString("payment_status")) || (session.getInt("amount_total") != (fee * 100)) ||
+            (metadata == null) || !pnr.equals(metadata.getString("pnr")) || !seat.equals(metadata.getString("seat"))) {
+
+            return false;
+        }
+
+        _log.info("Seat payment " + sessionId + " for " + pnr + " seat " + seat + ": Rs " + fee);
+
+        return true;
+    }
+
+    private static String _enc(String value) throws Exception {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8.name());
+    }
+
+    private JSONObject _stripe(String method, String path, String body) throws Exception {
+        String key = System.getenv("STRIPE_SECRET_KEY");
+
+        if (key == null) {
+            // Not started through setenv.sh (for example from an IDE): read the key from the data folder instead
+            java.nio.file.Path file = Paths.get(PropsUtil.get(PropsKeys.LIFERAY_HOME), "data", "stripe-key.txt");
+
+            if (Files.exists(file)) {
+                key = Files.readString(file).trim();
+            }
+        }
+
+        if (key == null) {
+            throw new IllegalStateException("Stripe key is not set");
+        }
+
+        HttpURLConnection connection = (HttpURLConnection)new URL("https://api.stripe.com/v1" + path).openConnection();
+
+        connection.setRequestMethod(method);
+        connection.setConnectTimeout(10_000);
+        connection.setReadTimeout(15_000);
+        connection.setRequestProperty(
+            "Authorization", "Basic " + Base64.getEncoder().encodeToString((key + ":").getBytes(StandardCharsets.UTF_8)));
+
+        if (body != null) {
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
+        }
+
+        try (InputStream in = (connection.getResponseCode() >= 400) ? connection.getErrorStream() : connection.getInputStream()) {
+            return JSONFactoryUtil.createJSONObject(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+        }
+        finally {
+            connection.disconnect();
         }
     }
 
