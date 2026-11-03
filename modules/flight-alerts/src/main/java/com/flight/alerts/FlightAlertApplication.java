@@ -23,6 +23,7 @@ import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.model.User;
 import com.liferay.portal.kernel.security.auth.AuthTokenUtil;
 import com.liferay.portal.kernel.security.auth.PrincipalException;
+import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import com.liferay.portal.kernel.servlet.PortalSessionContext;
 import com.liferay.portal.kernel.util.PortalUtil;
@@ -228,6 +229,134 @@ public class FlightAlertApplication extends Application {
 		}
 	}
 
+	/** Notifications the bell in the header shows: newest first, only the signed-in user's own. */
+	@GET
+	@Path("/notifications")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response notifications(@Context HttpServletRequest request) {
+		try {
+			User user = _user(request);
+
+			if (user == null) {
+				return _error(401, "Please log in");
+			}
+
+			List<ObjectEntry> mine = _myNotifications(user);
+
+			mine.sort((a, b) -> b.getCreateDate().compareTo(a.getCreateDate()));
+
+			JSONArray out = JSONFactoryUtil.createJSONArray();
+
+			for (ObjectEntry entry : mine.subList(0, Math.min(30, mine.size()))) {
+				Map<String, Serializable> v = entry.getValues();
+				JSONObject n = JSONFactoryUtil.createJSONObject();
+
+				n.put("id", entry.getObjectEntryId());
+				n.put("flightId", _string(v.get("flightId")));
+				n.put("flightNumber", _string(v.get("flightNumber")));
+				n.put("message", _string(v.get("message")));
+				n.put("seen", "yes".equals(_string(v.get("seen"))));
+				n.put("time", entry.getCreateDate().getTime());
+
+				out.put(n);
+			}
+
+			return Response.ok(out.toString()).build();
+		}
+		catch (Exception exception) {
+			_log.error("Could not load notifications", exception);
+
+			return _error(500, "Could not load notifications");
+		}
+	}
+
+	@POST
+	@Path("/notifications/read")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response markRead(@Context HttpServletRequest request) {
+		try {
+			User user = _user(request);
+
+			if (user == null) {
+				return _error(401, "Please log in");
+			}
+
+			AuthTokenUtil.checkCSRFToken(request, FlightAlertApplication.class.getName());
+
+			for (ObjectEntry entry : _myNotifications(user)) {
+				if ("yes".equals(_string(entry.getValues().get("seen")))) {
+					continue;
+				}
+
+				Map<String, Serializable> values = new HashMap<>(entry.getValues());
+
+				values.put("seen", "yes");
+
+				ServiceContext sc = new ServiceContext();
+
+				sc.setCompanyId(user.getCompanyId());
+				sc.setScopeGroupId(_SITE_ID);
+				sc.setUserId(user.getUserId());
+
+				_objectEntryLocalService.updateObjectEntry(
+					user.getUserId(), entry.getObjectEntryId(), entry.getObjectEntryFolderId(), values, sc);
+			}
+
+			return Response.ok("{}").build();
+		}
+		catch (PrincipalException principalException) {
+			return _error(403, "Please refresh the page and try again");
+		}
+		catch (Exception exception) {
+			_log.error("Could not mark notifications as read", exception);
+
+			return _error(500, "Could not update notifications");
+		}
+	}
+
+	private List<ObjectEntry> _myNotifications(User user) throws Exception {
+		List<ObjectEntry> mine = new ArrayList<>();
+
+		for (ObjectEntry entry : _objectEntryLocalService.getObjectEntries(
+				_SITE_ID, _notificationDefinition(user.getCompanyId()).getObjectDefinitionId(), 0, 1000)) {
+
+			if (String.valueOf(user.getUserId()).equals(_string(entry.getValues().get("recipientId")))) {
+				mine.add(entry);
+			}
+		}
+
+		return mine;
+	}
+
+	private ObjectDefinition _notificationDefinition(long companyId) throws Exception {
+		return _objectDefinitionLocalService.getObjectDefinition(companyId, "C_FlightNotification");
+	}
+
+	private void _notify(User user, long flightId, String flightNumber, String text) {
+		try {
+			Map<String, Serializable> values = new HashMap<>();
+
+			values.put("recipientId", String.valueOf(user.getUserId()));
+			values.put("flightId", String.valueOf(flightId));
+			values.put("flightNumber", flightNumber);
+			values.put("message", text);
+			values.put("seen", "no");
+
+			ServiceContext sc = new ServiceContext();
+
+			sc.setCompanyId(user.getCompanyId());
+			sc.setScopeGroupId(_SITE_ID);
+			sc.setUserId(user.getUserId());
+
+			_objectEntryLocalService.addObjectEntry(
+				_SITE_ID, user.getUserId(), _notificationDefinition(user.getCompanyId()).getObjectDefinitionId(),
+				0L, null, values, sc);
+		}
+		catch (Exception exception) {
+			_log.error("Could not save a notification for user " + user.getUserId(), exception);
+		}
+	}
+
 	@Activate
 	protected void activate() {
 		_loadState();
@@ -348,6 +477,34 @@ public class FlightAlertApplication extends Application {
 					Arrays.asList(_flightIds(user)));
 
 				if (ids.add(String.valueOf(entry.getKey()))) {
+					_saveFlightIds(user, ids.toArray(new String[0]));
+				}
+			}
+		}
+
+		ObjectDefinition bookings = _objectDefinitionLocalService.fetchObjectDefinition(
+			PortalUtil.getDefaultCompanyId(), "C_Booking");
+
+		for (ObjectEntry booking : (bookings == null) ? new ArrayList<ObjectEntry>() :
+				_objectEntryLocalService.getObjectEntries(_SITE_ID, bookings.getObjectDefinitionId(), 0, 1000)) {
+
+			String email = _string(booking.getValues().get("email")).trim();
+			String flightId = _string(booking.getValues().get("flightId")).trim();
+
+			if (email.isEmpty() || flightId.isEmpty() || !_passesFollowed.add(-booking.getObjectEntryId())) {
+				continue;
+			}
+
+			changed = true;
+
+			User user = UserLocalServiceUtil.fetchUserByEmailAddress(PortalUtil.getDefaultCompanyId(), email);
+
+			if ((user != null) && !user.isGuestUser()) {
+				_ensureColumn(user.getCompanyId());
+
+				Set<String> ids = new LinkedHashSet<>(Arrays.asList(_flightIds(user)));
+
+				if (ids.add(flightId)) {
 					_saveFlightIds(user, ids.toArray(new String[0]));
 				}
 			}
@@ -545,6 +702,8 @@ public class FlightAlertApplication extends Application {
 
 				continue;
 			}
+
+			_notify(user, flightId, current.flightNumber, String.join("; ", changes));
 
 			try {
 				_sendEmail(user, current, changes);

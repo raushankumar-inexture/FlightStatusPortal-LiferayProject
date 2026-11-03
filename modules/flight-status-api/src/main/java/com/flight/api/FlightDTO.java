@@ -1,6 +1,7 @@
 package com.flight.api;
 
-public class FlightDTO {
+public class FlightDTO 
+{
     public long id;
     public String flightNumber;
     public String status;
