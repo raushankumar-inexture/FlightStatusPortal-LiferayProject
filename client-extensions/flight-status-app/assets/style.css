@@ -602,3 +602,128 @@ flight-status-app .fa-toast span { color: var(--fa-gold); }
 @keyframes fa-toastin { from { opacity: 0; transform: translateY(-10px); } }
 flight-status-app .fa-notes { overflow-x: hidden; }
 flight-status-app .fa-note span { white-space: normal; overflow-wrap: anywhere; }
+
+/* Paid seats (window, aisle, extra legroom) */
+flight-status-app .fa-seat.paid:not(.taken):not(.mine) { background: #fff6dd; border-color: #e0a800; }
+flight-status-app .fa-seatkey i.paid { background: #fff6dd; border-color: #e0a800; }
+
+/* Check-in page: two columns, plane-shaped seat map, price summary, ticket-style pass */
+flight-status-app .fa-ckform { max-width: none; grid-template-columns: minmax(280px, 380px) 1fr; align-items: start; gap: 1.5rem; }
+flight-status-app .fa-ckside { display: grid; gap: 1rem; position: sticky; top: 1rem; }
+flight-status-app .fa-found { background: #eef3ff; border-color: #cfdcff; }
+flight-status-app .fa-found span { color: #3a4a70; }
+flight-status-app .fa-summary { display: grid; grid-template-columns: 1fr auto; gap: .1rem .75rem; padding: 1rem; border-radius: 12px; background: #0f1e50; color: #fff; }
+flight-status-app .fa-summary span { grid-column: 1 / -1; font-size: .75rem; text-transform: uppercase; opacity: .8; }
+flight-status-app .fa-summary b { font-size: 2rem; line-height: 1; }
+flight-status-app .fa-summary em { grid-row: 2 / 4; grid-column: 2; align-self: center; font-style: normal; font-weight: 700; font-size: 1.2rem; color: #ffc61a; }
+flight-status-app .fa-summary small { opacity: .85; }
+flight-status-app .fa-plane { background: linear-gradient(#f4f8ff, #fff); border: 2px solid #cfd9f2; border-radius: 160px 160px 28px 28px / 110px 110px 28px 28px; padding: 3.5rem 1.25rem 1.25rem; }
+flight-status-app .fa-plane .fa-seatwrap > b { display: block; text-align: center; }
+flight-status-app .fa-plane .fa-seatkey { flex-wrap: wrap; gap: .4rem 1rem; margin: .5rem 0; }
+flight-status-app .fa-plane .fa-seats { max-height: 560px; background: transparent; gap: .4rem; }
+flight-status-app .fa-plane .fa-seat { width: 2.4rem; height: 2.4rem; border-radius: 9px 9px 5px 5px; border-width: 2px; font-weight: 600; transition: transform .1s; }
+flight-status-app .fa-plane .fa-seat:hover:not(.taken):not(.other) { transform: scale(1.12); }
+flight-status-app .fa-seat.leg:not(.taken):not(.mine) { background: #ffe39a; border-color: #d69a00; }
+flight-status-app .fa-seatkey i.leg { background: #ffe39a; border-color: #d69a00; }
+flight-status-app .fa-seat.taken { position: relative; color: transparent; }
+flight-status-app .fa-seat.taken::after { content: "\00d7"; position: absolute; inset: 0; display: grid; place-items: center; color: #8a94a8; font-size: 1.2rem; }
+flight-status-app .fa-seat.mine { box-shadow: 0 0 0 3px rgba(20, 70, 200, .25); }
+flight-status-app .fa-pass { max-width: 900px; box-shadow: 0 12px 32px rgba(15, 30, 80, .15); }
+flight-status-app .fa-pass-grid b { font-size: 1.05rem; }
+flight-status-app .fa-pass-qr svg { width: 150px; height: 150px; }
+flight-status-app .fa-paidbadge { font-style: normal; font-size: .75rem; background: #ffc61a; color: #0f1e50; padding: .15rem .6rem; border-radius: 999px; margin-right: .6rem; }
+@media (max-width: 860px) { flight-status-app .fa-ckform { grid-template-columns: 1fr; } flight-status-app .fa-ckside { position: static; } }
+
+/* Production polish: compact find bar, booking strip, slim cabin */
+flight-status-app .fa-findbar { max-width: none; grid-template-columns: 1fr 1fr auto; align-items: end; padding: 1rem 1.25rem; }
+flight-status-app .fa-findbar .fa-error { grid-column: 1 / -1; }
+flight-status-app .fa-ckform { grid-template-columns: 360px minmax(0, 1fr); gap: 1.25rem; padding: 1.25rem; }
+flight-status-app .fa-ckform .fa-found { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, auto); justify-content: space-between; gap: 1rem; padding: .9rem 1.25rem; background: #f3f6fd; border: 1px solid #dbe4f7; border-radius: 12px; }
+flight-status-app .fa-ckform .fa-found div { display: grid; gap: .1rem; }
+flight-status-app .fa-ckform .fa-found span { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7790; }
+flight-status-app .fa-ckform .fa-found b { font-size: 1rem; color: #0f1e50; }
+flight-status-app .fa-ckside { align-self: start; padding: 1rem; border: 1px solid #dbe4f7; border-radius: 12px; background: #fff; box-shadow: 0 4px 14px rgba(15, 30, 80, .06); }
+flight-status-app .fa-summary { padding: .9rem 1rem; }
+flight-status-app .fa-fees { width: 100%; border-collapse: collapse; font-size: .85rem; color: #44506e; }
+flight-status-app .fa-fees td { padding: .35rem 0; border-bottom: 1px solid #eef1f8; }
+flight-status-app .fa-fees td:last-child { text-align: right; font-weight: 600; color: #0f1e50; }
+flight-status-app .fa-plane { max-width: 400px; width: 100%; margin: 0 auto; padding: 2rem 1rem 1rem; border: 2px solid #cfd9f2; border-radius: 90px 90px 18px 18px / 60px 60px 18px 18px; background: #fff; }
+flight-status-app .fa-plane .fa-seats { max-height: none; overflow: visible; gap: .2rem; margin: .5rem 0 0; padding: 0; }
+flight-status-app .fa-plane .fa-seat { width: 2rem; height: 2rem; font-size: .75rem; border-width: 1.5px; }
+flight-status-app .fa-plane .fa-seatrow { gap: .25rem; }
+flight-status-app .fa-plane .fa-seatzone { margin: .6rem 0 .2rem; padding-top: .4rem; border-top: 1px solid #e3e9f6; font-size: .7rem; }
+flight-status-app .fa-plane .fa-seatkey { font-size: .75rem; gap: .3rem .8rem; margin: 0 0 .25rem; }
+flight-status-app .fa-seat:focus-visible { outline: 3px solid #1146d6; outline-offset: 2px; }
+flight-status-app .fa-seat.mine { background: #1146d6; border-color: #0b2f94; }
+@media (max-width: 860px) {
+	flight-status-app .fa-findbar { grid-template-columns: 1fr; }
+	flight-status-app .fa-ckform { grid-template-columns: 1fr; padding: .75rem; }
+	flight-status-app .fa-ckform .fa-found { grid-template-columns: repeat(2, 1fr); }
+	flight-status-app .fa-plane { order: 1; }
+	flight-status-app .fa-ckside { order: 2; position: sticky; bottom: 0; z-index: 5; box-shadow: 0 -6px 18px rgba(15, 30, 80, .18); }
+	flight-status-app .fa-fees { display: none; }
+}
+flight-status-app .fa-adminsearch { width: 100%; max-width: 420px; margin: 0 0 .75rem; padding: .65rem 1rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: .95rem; }
+flight-status-app tbody tr[hidden] { display: none; }
+
+/* Admin Reservations page */
+flight-status-app .fa-rescards { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin-bottom: 1rem; }
+flight-status-app .fa-rescards div { display: grid; padding: .9rem 1rem; background: #fff; border: 1px solid var(--fa-line); border-radius: 12px; }
+flight-status-app .fa-rescards b { font-size: 1.6rem; color: #0f1e50; line-height: 1.1; }
+flight-status-app .fa-rescards span { font-size: .8rem; color: #6b7790; }
+flight-status-app .fa-resbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: .75rem; }
+flight-status-app .fa-resbar input, flight-status-app .fa-resbar select { padding: .6rem .8rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: .9rem; background: #fff; }
+flight-status-app .fa-resq { flex: 1 1 260px; }
+flight-status-app .fa-rescount { margin-left: auto; color: #6b7790; font-size: .85rem; }
+flight-status-app .fa-sortable { cursor: pointer; user-select: none; }
+flight-status-app .fa-sortable:hover { color: var(--fa-blue); }
+@media (max-width: 700px) { flight-status-app .fa-rescards { grid-template-columns: repeat(2, 1fr); } }
+
+/* Seat selection like a seat-map card: key and details on the left, cabin with seat icons on the right */
+flight-status-app .fa-ckform { grid-template-columns: minmax(300px, 1fr) minmax(340px, 460px); max-width: 1000px; margin: 0 auto; padding: 0; background: none; border: 0; box-shadow: none; }
+flight-status-app .fa-ckcard { background: #fff; border: 1px solid var(--fa-line); border-radius: 14px; padding: 1.25rem; box-shadow: 0 4px 14px rgba(15, 30, 80, .06); }
+flight-status-app .fa-ckcard h3 { margin: 0 0 .9rem; font-size: 1.05rem; color: #0f1e50; }
+flight-status-app .fa-ckcard h4 { margin: 1.1rem 0 .6rem; padding-top: .9rem; border-top: 1px solid #e3e9f6; font-size: .85rem; color: #0f1e50; }
+flight-status-app .fa-ckside { display: block; position: static; }
+flight-status-app .fa-ckside .fa-summary, flight-status-app .fa-ckside .fa-error, flight-status-app .fa-ckside .fa-btn { margin-top: 1rem; }
+flight-status-app .fa-ckside .fa-btn { width: 100%; }
+flight-status-app .fa-kv { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem 1rem; margin: 0; }
+flight-status-app .fa-kv dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7790; }
+flight-status-app .fa-kv dd { margin: 0; font-weight: 600; color: #0f1e50; }
+flight-status-app .fa-key { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem 1rem; }
+flight-status-app .fa-key span { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: #44506e; }
+flight-status-app .fa-key svg { width: 1.7rem; height: 1.7rem; flex: none; }
+flight-status-app .fa-sv .bk, flight-status-app .fa-sv .cs { fill: var(--sf, #fff); stroke: currentColor; stroke-width: 1.6; }
+flight-status-app .fa-key .fa-sv { color: #1146d6; --sf: #fff; }
+flight-status-app .fa-key .fa-sv.paid { color: #c98f00; --sf: #fff3c4; }
+flight-status-app .fa-key .fa-sv.leg { color: #b27a00; --sf: #ffd86b; }
+flight-status-app .fa-key .fa-sv.taken { color: #1f2a52; --sf: #1f2a52; }
+flight-status-app .fa-key .fa-sv.mine { color: #0b2f94; --sf: #1146d6; }
+flight-status-app .fa-plane { max-width: none; margin: 0; padding: 1.25rem; border-radius: 14px; }
+flight-status-app .fa-plane .fa-seats { display: grid; justify-content: center; }
+flight-status-app .fa-plane .fa-seat { width: 2.2rem; height: 2.2rem; padding: 0; border: 0; border-radius: 0; background: transparent; color: #1146d6; --sf: #fff; }
+flight-status-app .fa-plane .fa-seat svg { width: 100%; height: 100%; display: block; }
+flight-status-app .fa-plane .fa-seat.paid:not(.taken):not(.mine) { background: transparent; border: 0; color: #c98f00; --sf: #fff3c4; }
+flight-status-app .fa-plane .fa-seat.leg:not(.taken):not(.mine) { background: transparent; border: 0; color: #b27a00; --sf: #ffd86b; }
+flight-status-app .fa-plane .fa-seat.taken { background: transparent; color: #1f2a52; --sf: #1f2a52; opacity: 1; }
+flight-status-app .fa-plane .fa-seat.taken::after { content: none; }
+flight-status-app .fa-plane .fa-seat.mine { background: transparent; color: #0b2f94; --sf: #1146d6; box-shadow: none; }
+flight-status-app .fa-plane .fa-seat.other { opacity: .3; }
+flight-status-app .fa-plane .fa-seat:hover:not(.taken):not(.other) { transform: scale(1.12); }
+flight-status-app .fa-seathead b { width: 2.2rem; text-align: center; color: #6b7790; font-size: .8rem; }
+flight-status-app .fa-seathead em, flight-status-app .fa-seatrow em { width: 1.4rem; }
+@media (max-width: 860px) { flight-status-app .fa-ckform { grid-template-columns: 1fr; } flight-status-app .fa-plane { order: 1; } flight-status-app .fa-ckside { order: 2; position: static; box-shadow: none; } flight-status-app .fa-ckside .fa-fees { display: table; } }
+flight-status-app .fa-summary small { grid-column: 1; color: #dbe4ff; opacity: 1; font-size: .85rem; }
+
+/* Cabin: scrolls inside its card, wider page, green extra-legroom seats */
+flight-status-app .fa-ckform { max-width: none; grid-template-columns: minmax(340px, 1fr) minmax(440px, 620px); }
+flight-status-app .fa-plane .fa-seats { position: relative; max-height: 620px; overflow-y: auto; overflow-x: hidden; padding: 0 .5rem .5rem; scrollbar-width: thin; }
+flight-status-app .fa-plane .fa-seathead { position: sticky; top: 0; z-index: 2; background: #fff; padding: .4rem 0; border-bottom: 1px solid #e3e9f6; }
+flight-status-app .fa-plane .fa-seat { width: 2.6rem; height: 2.6rem; }
+flight-status-app .fa-seathead b { width: 2.6rem; }
+flight-status-app .fa-plane .fa-seathead em, flight-status-app .fa-plane .fa-seatrow em { width: 2.4rem; }
+flight-status-app .fa-plane .fa-seatrow span { width: 2rem; font-size: .85rem; }
+flight-status-app .fa-plane .fa-seat.leg:not(.taken):not(.mine) { color: #15803d; --sf: #bbf7d0; }
+flight-status-app .fa-key .fa-sv.leg { color: #15803d; --sf: #bbf7d0; }
+flight-status-app .fa-fees tr:first-child td:first-child { color: #15803d; font-weight: 600; }
+@media (max-width: 860px) { flight-status-app .fa-ckform { grid-template-columns: 1fr; } flight-status-app .fa-plane .fa-seats { max-height: 70vh; } }
