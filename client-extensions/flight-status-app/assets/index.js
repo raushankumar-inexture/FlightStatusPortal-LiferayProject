@@ -1390,12 +1390,18 @@ class FlightStatusApp extends HTMLElement {
 			return;
 		}
 
-		const [flights, ap] = await Promise.all([this.flights(), this.airports()]);
-		await this.loadFlightAlerts();
-		this.bindFlightAlerts(view);
-		const followed = flights.filter((flight) => this._followingFlights.has(String(flight.id)));
-		view.innerHTML = '<div class="fa-title"><h1>My Flight Alerts</h1><p>We will email you when a followed flight’s status, delay or gate changes.</p></div>' +
-			(followed.length ? followed.map((flight) => this.flightRow(flight, ap)).join('') : '<p class="fa-msg">You are not following any flights yet. Browse <a href="' + this._root + '/flight-status">flight status</a> and choose “Get email alerts”.</p>');
+		// Load and draw again every 30 seconds, so a delay or gate change made by the admin shows without a reload
+		const load = async () => {
+			const [flights, ap] = await Promise.all([this.flights(), this.airports()]);
+			await this.loadFlightAlerts();
+			this.bindFlightAlerts(view);
+			const followed = flights.filter((flight) => this._followingFlights.has(String(flight.id)));
+			view.innerHTML = '<div class="fa-title"><h1>My Flight Alerts</h1><p>We will email you when a followed flight’s status, delay or gate changes.</p></div>' +
+				(followed.length ? followed.map((flight) => this.flightRow(flight, ap)).join('') : '<p class="fa-msg">You are not following any flights yet. Browse <a href="' + this._root + '/flight-status">flight status</a> and choose “Get email alerts”.</p>');
+		};
+		await load();
+		clearInterval(this._timer);
+		this._timer = setInterval(() => load().catch(() => {}), 30000);
 	}
 
 	async view_airports(view) {
