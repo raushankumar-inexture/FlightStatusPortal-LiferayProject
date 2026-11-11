@@ -15,6 +15,7 @@ import com.liferay.portal.kernel.security.auth.AuthTokenUtil;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import com.liferay.portal.kernel.servlet.PortalSessionContext;
+import com.liferay.portal.kernel.util.HtmlUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.PropsKeys;
 import com.liferay.portal.kernel.util.PropsUtil;
@@ -45,11 +46,14 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 
 
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 
 import java.text.SimpleDateFormat;
 
 import java.util.Base64;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -132,7 +136,7 @@ public class BoardingApplication extends Application {
 
             for (ObjectEntry entry : _entries("C_BoardingPass", siteId)) {
                 if (entry.getUserId() == user.getUserId()) {
-                    out.put(_pass(entry));
+                    out.put(_pass(entry, _baseUrl(request)));
                 }
             }
 
@@ -298,7 +302,7 @@ public class BoardingApplication extends Application {
                     user.getUserId(), booking.getObjectEntryId(), booking.getObjectEntryFolderId(), checkedIn,
                     serviceContext);
 
-                return Response.ok(_pass(created).toString()).build();
+                return Response.ok(_pass(created, _baseUrl(request)).toString()).build();
             }
         }
         catch (Exception exception) {
@@ -620,7 +624,148 @@ public class BoardingApplication extends Application {
         return sb.toString();
     }
 
-    private JSONObject _pass(ObjectEntry entry) {
+    /**
+     * What a phone shows when someone scans the QR code of a boarding pass: a small read-only page that
+     * says whether the pass is real and shows the flight, seat and gate. The link carries a signed token,
+     * so it cannot be guessed or edited. No email, phone number or booking code is shown.
+     */
+    @GET
+    @Path("/check")
+    @Produces("text/html; charset=UTF-8")
+    public Response check(@QueryParam("t") String token) {
+        try {
+            long id = _passIdFromToken((token == null) ? "" : token);
+
+            ObjectEntry entry = (id == 0) ? null : _objectEntryLocalService.fetchObjectEntry(id);
+
+            if ((entry == null) || (entry.getObjectDefinitionId() != _definition("C_BoardingPass").getObjectDefinitionId())) {
+                return Response.status(404).header("Cache-Control", "no-store").entity(_checkPage(false, "")).build();
+            }
+
+            Map<String, Serializable> v = entry.getValues();
+
+            ObjectEntry flight = _findFlight(entry.getGroupId(), String.valueOf(v.get("flightNumber")), String.valueOf(v.get("flightId")));
+
+            String status = "";
+
+            if (flight != null) {
+                status = String.valueOf(flight.getValues().get("showstatus")).replaceAll("([a-z])([A-Z])", "$1 $2");
+
+                Object delay = flight.getValues().get("delayMinutes");
+
+                if ((delay != null) && !"0".equals(String.valueOf(delay))) {
+                    status += ", +" + delay + " min";
+                }
+            }
+
+            String[] names = String.valueOf(v.get("passengerName")).trim().split("\\s+");
+            String shortName = (names.length > 1) ? names[0] + " " + names[names.length - 1].charAt(0) + "." : names[0];
+
+            Object time = v.get("departureTime");
+            String iso = "";
+
+            if (time instanceof Date) {
+                SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+                format.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+                iso = format.format((Date)time);
+            }
+
+            StringBuilder rows = new StringBuilder();
+
+            _row(rows, "Passenger", HtmlUtil.escape(shortName));
+            _row(rows, "Flight", HtmlUtil.escape(String.valueOf(v.get("flightNumber"))));
+            _row(rows, "Route", HtmlUtil.escape(v.get("origin") + " \u2192 " + v.get("destination")));
+            _row(rows, "Departs", "<time datetime=\"" + iso + "\">" + HtmlUtil.escape(iso) + "</time>");
+            _row(rows, "Gate", HtmlUtil.escape(String.valueOf(v.get("gate"))));
+            _row(rows, "Seat", HtmlUtil.escape(String.valueOf(v.get("seat"))));
+            String travelClass = String.valueOf(v.get("travelClass"));
+
+            _row(rows, "Class", HtmlUtil.escape((travelClass.isEmpty() || "null".equals(travelClass)) ? "Economy" : travelClass));
+            _row(rows, "Flight status", HtmlUtil.escape(status.isEmpty() ? "Not available" : status));
+
+            return Response.ok(_checkPage(true, rows.toString())).header("Cache-Control", "no-store").build();
+        }
+        catch (Exception exception) {
+            _log.error("Could not check the boarding pass", exception);
+
+            return Response.status(500).entity(_checkPage(false, "")).build();
+        }
+    }
+
+    private static void _row(StringBuilder rows, String label, String value) {
+        rows.append("<div class=\"row\"><span>").append(label).append("</span><b>").append(value).append("</b></div>");
+    }
+
+    private static String _checkPage(boolean valid, String rows) {
+        return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+            "<meta name=\"robots\" content=\"noindex\"><title>Boarding pass check</title><style>" +
+            "body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:#eef3ff;color:#0f1e50;padding:1rem}" +
+            ".card{max-width:460px;margin:2rem auto;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(15,30,80,.15);overflow:hidden}" +
+            ".top{padding:1.2rem 1.4rem;color:#fff;background:" + (valid ? "#1f9d55" : "#d64545") + ";font-size:1.25rem;font-weight:700}" +
+            ".top small{display:block;font-weight:400;opacity:.9;margin-top:.25rem;font-size:.9rem}" +
+            ".row{display:flex;justify-content:space-between;gap:1rem;padding:.8rem 1.4rem;border-top:1px solid #eef1f8}" +
+            ".row span{color:#6b7790}.note{padding:1rem 1.4rem;color:#6b7790;font-size:.85rem}</style></head><body><div class=\"card\">" +
+            (valid ? "<div class=\"top\">&#10003; Valid boarding pass<small>Flight Status Portal</small></div>" + rows + "<div class=\"note\">Times are shown in your phone's time zone.</div>" :
+                "<div class=\"top\">&#10007; Invalid boarding pass<small>This code is not a real pass, or it was changed.</small></div><div class=\"note\">Ask the passenger to open their boarding pass again.</div>") +
+            "</div><script>document.querySelectorAll('time').forEach(function(t){var d=new Date(t.getAttribute('datetime'));if(!isNaN(d))t.textContent=d.toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})})</script></body></html>";
+    }
+
+    /** The address people reach the site at: bundles/data/public-url.txt if it exists, otherwise the address of this request. */
+    private static String _baseUrl(HttpServletRequest request) {
+        try {
+            java.io.File file = new java.io.File(PropsUtil.get(PropsKeys.LIFERAY_HOME) + "/data", "public-url.txt");
+
+            if (file.exists()) {
+                String value = Files.readString(file.toPath()).trim();
+
+                if (!value.isEmpty()) {
+                    return value.replaceAll("/+$", "");
+                }
+            }
+        }
+        catch (Exception exception) {
+            _log.warn("Could not read public-url.txt: " + exception.getMessage());
+        }
+
+        int port = request.getServerPort();
+
+        return request.getScheme() + "://" + request.getServerName() + (((port == 80) || (port == 443)) ? "" : ":" + port);
+    }
+
+    private static String _passToken(long id) throws Exception {
+        return id + "." + _sign("pass-qr|" + id);
+    }
+
+    private static long _passIdFromToken(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            long id = Long.parseLong(parts[0]);
+
+            return MessageDigest.isEqual(_sign("pass-qr|" + id).getBytes(StandardCharsets.UTF_8), parts[1].getBytes(StandardCharsets.UTF_8)) ? id : 0;
+        }
+        catch (Exception exception) {
+            return 0;
+        }
+    }
+
+    /** Signed with the same secret file as the login tickets (bundles/data/auth-secret.txt), but over a different text, so the two can never be mixed up. */
+    private static String _sign(String text) throws Exception {
+        java.nio.file.Path file = Paths.get(PropsUtil.get(PropsKeys.LIFERAY_HOME), "data", "auth-secret.txt");
+
+        if (!Files.exists(file)) {
+            throw new IllegalStateException("auth-secret.txt does not exist yet (it is made by the login module)");
+        }
+
+        Mac mac = Mac.getInstance("HmacSHA256");
+
+        mac.init(new SecretKeySpec(Files.readString(file).trim().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(text.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private JSONObject _pass(ObjectEntry entry, String baseUrl) {
         Map<String, Serializable> v = entry.getValues();
 
         JSONObject json = JSONFactoryUtil.createJSONObject();
@@ -646,6 +791,13 @@ public class BoardingApplication extends Application {
         }
 
         json.put("created", entry.getCreateDate().getTime());
+
+        try {
+            json.put("checkUrl", baseUrl + "/o/flight-boarding/check?t=" + _passToken(entry.getObjectEntryId()));
+        }
+        catch (Exception exception) {
+            _log.warn("Could not sign the boarding pass link: " + exception.getMessage());
+        }
 
         return json;
     }
