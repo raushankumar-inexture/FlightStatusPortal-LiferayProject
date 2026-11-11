@@ -862,3 +862,6 @@ flight-status-app .fa-addons select { padding: .6rem .7rem; border: 1px solid va
 flight-status-app .fa-sumadd { grid-column: 1 / -1; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid rgba(255, 255, 255, .2); font-size: .9rem; }
 flight-status-app .fa-sumadd.total { font-size: 1.05rem; display: flex; justify-content: space-between; }
 flight-status-app .fa-sumadd.total b { color: #ffc61a; }
+
+flight-status-app .fa-badge.feedtag { background: #e6eeff; color: #1146d6; font-size: .65rem; padding: .1rem .45rem; margin-left: .35rem; }
+flight-status-app .fa-feedcard p { margin: .35rem 0; }

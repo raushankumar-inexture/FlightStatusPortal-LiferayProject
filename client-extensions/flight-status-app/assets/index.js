@@ -876,13 +876,14 @@ class FlightStatusApp extends HTMLElement {
 				'<section class="fa-dashcard"><h3>Flights by day</h3><div class="fa-dbars">' + (dayList.map((d) => `<div class="fa-dbar"><b>${d[1]}</b><i style="height:${Math.max(6, d[1] / maxDay * 100)}%"></i><span>${esc(new Date(d[0] + 'T00:00:00Z').toLocaleDateString([], {day: 'numeric', month: 'short', timeZone: 'UTC'}))}</span></div>`).join('') || '<p class="fa-panelnote">No flights yet.</p>') + '</div></section>' +
 				'<section class="fa-dashcard"><h3>Needs attention</h3><h4>Delayed flights (' + flights.filter(isDelayed).length + ')</h4>' + (late.length ? late.map((f) => `<div class="fa-late"><div><b>${esc(f.flightNumber)}</b><span>${esc(fmtDate(f.departureTime))}</span></div><em>${Number(f.delayMinutes) > 0 ? '+' + esc(f.delayMinutes) + ' min' : esc(f.showstatus ? f.showstatus.name : '')}</em></div>`).join('') : '<p class="fa-panelnote">No delays right now.</p>') +
 					'<h4>Not checked in (' + waiting.length + ')</h4>' + (waiting.slice(0, 5).map((x) => `<div class="fa-late"><div><b>${esc(x.pnr)}</b><span>${esc(x.firstName + ' ' + x.lastName)}</span></div><em class="muted">${esc(x.flightNumber)}</em></div>`).join('') || '<p class="fa-panelnote">Everyone has checked in.</p>') + '</section>' +
+				'<section class="fa-dashcard fa-feedcard"><h3>Live flight data</h3><p class="fa-panelnote">Checking...</p></section>' +
 				'<section class="fa-dashcard"><h3>Recent activity</h3>' + (events.slice(0, 8).map((e) => `<div class="fa-event"><span class="fa-ico sm">${ICONS[e.icon]}</span><div>${e.text}<small>${e.t ? esc(new Date(e.t).toLocaleString([], {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})) : ''}</small></div></div>`).join('') || '<p class="fa-panelnote">Nothing yet.</p>') + '</section>' +
 				'</div>';
 		} else if (tab === 'flights') {
 			body = '<div class="fa-head"><h2>Flights</h2><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button></div>' +
 				this.adminTable(['Flight', 'Route', 'Departure', 'Status', 'Delay', 'Bookings'], flights.map((f) => {
 					const o = apById[f.r_originAirport_c_airportId], d = apById[f.r_destinationAirport_c_airportId];
-					return [f.id, [esc(f.flightNumber) + (airlineOf(f.flightNumber, f.airline) ? '<br><small>' + esc(airlineOf(f.flightNumber, f.airline)) + '</small>' : ''), esc((o ? o.code : '?') + ' → ' + (d ? d.code : '?')), '<span data-v="' + (Date.parse(f.departureTime) || 0) + '">' + fmtDate(f.departureTime) + ' ' + fmtTime(f.departureTime) + '</span>',
+					return [f.id, [esc(f.flightNumber) + (airlineOf(f.flightNumber, f.airline) ? '<br><small>' + esc(airlineOf(f.flightNumber, f.airline)) + '</small>' : '') + (f.source === 'feed' ? ' <span class="fa-badge feedtag">Live feed</span>' : ''), esc((o ? o.code : '?') + ' → ' + (d ? d.code : '?')), '<span data-v="' + (Date.parse(f.departureTime) || 0) + '">' + fmtDate(f.departureTime) + ' ' + fmtTime(f.departureTime) + '</span>',
 						'<span class="fa-badge ' + statusClass(f.showstatus ? f.showstatus.name : '') + '">' + esc(f.showstatus ? f.showstatus.name : '') + '</span>', (f.delayMinutes || 0) + ' min', String(bookings.filter((b) => String(b.flightId) === String(f.id) || (!b.flightId && b.flightNumber === f.flightNumber)).length)]];
 				}));
 		} else if (tab === 'bookings') {
@@ -938,6 +939,7 @@ class FlightStatusApp extends HTMLElement {
 		if (adminSearch[tab]) this.setupFilter(view, {key: 'admin-' + tab, items: '.fa-table tbody tr', placeholder: adminSearch[tab], table: true});
 		if (tab === 'reservations') this.bindReservations(view, reservations);
 		if (tab === 'gate') this.bindGate(view);
+		if (tab === 'dashboard') this.bindFeed(view);
 		view.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => this.adminForm(view, b.dataset.add, null, {airports, flights, gates, bookings})));
 		view.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
 			const list = tab === 'flights' ? flights : tab === 'airports' ? airports : tab === 'bookings' ? bookings : gates;
@@ -953,6 +955,39 @@ class FlightStatusApp extends HTMLElement {
 				await this.renderAdmin(view, tab, {error: true, text: 'Could not delete: ' + e.message + (tab === 'airports' ? ' (an airport used by flights cannot be deleted)' : '')});
 			}
 		}));
+	}
+
+	// Dashboard card for the real flight data feed: connected or not, last sync, calls used, and a Sync now button.
+	async bindFeed(view) {
+		const card = view.querySelector('.fa-feedcard');
+		if (!card) return;
+		const draw = async (message) => {
+			let s;
+			try {
+				const res = await fetch('/o/flight-feed/status', {credentials: 'include'});
+				if (!res.ok) throw new Error('HTTP ' + res.status);
+				s = await res.json();
+			} catch (e) {
+				card.innerHTML = '<h3>Live flight data</h3><p class="fa-panelnote">The feed is not available (' + esc(e.message) + ').</p>';
+				return;
+			}
+			card.innerHTML = '<h3>Live flight data</h3>' + (s.enabled
+				? '<p>Connected. Last sync: <b>' + (s.lastRun === 'never' ? 'never' : esc(fmtDate(s.lastRun) + ' ' + fmtTime(s.lastRun))) + '</b></p><p class="fa-panelnote">' + esc(message || s.lastResult) + '</p><p>Calls this month: <b>' + esc(s.callsThisMonth) + ' of ' + esc(s.monthlyLimit) + '</b></p><button class="fa-btn block-auto fa-feedsync" type="button">Sync now</button>'
+				: '<p>Not connected.</p><p class="fa-panelnote">Add <b>FEED_API_KEY</b> to <b>bundles/data/flight-feed.properties</b> (a free key from aviationstack.com) to load real flights and delays automatically. Flights you type in yourself are never changed by the feed.</p>');
+			const btn = card.querySelector('.fa-feedsync');
+			if (btn) btn.addEventListener('click', async () => {
+				btn.disabled = true;
+				btn.textContent = 'Syncing...';
+				try {
+					const out = await getFetch()('/o/flight-feed/sync', {method: 'POST', credentials: 'include'});
+					const data = await out.json();
+					draw(out.ok ? JSON.parse(JSON.stringify(data)).result : data.error);
+				} catch (e) {
+					draw('The sync failed: ' + e.message);
+				}
+			});
+		};
+		draw();
 	}
 
 	// Gate scan: look up a boarding pass from its QR link and mark the passenger as boarded.
