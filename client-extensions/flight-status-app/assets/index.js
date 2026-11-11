@@ -25,6 +25,11 @@ const ICONS = {
 	gate: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1"/><circle cx="15" cy="12" r="1"/></svg>',
 	clock: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 	bell: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+	grid: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+	ticket: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M13 6v12" stroke-dasharray="2 2"/></svg>',
+	users: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/></svg>',
+	map: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4z"/><path d="M8 2v16M16 6v16"/></svg>',
+	out: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
 	shield: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>',
 };
 
@@ -176,6 +181,88 @@ class FlightStatusApp extends HTMLElement {
 		}
 	}
 
+	// Search box above a list: hides the rows or cards that do not match while you type, and stays applied when the page refreshes itself.
+	// With opts.table it also sorts by a clicked column header and shows the rows a page at a time.
+	setupFilter(view, opts) {
+		if (this._filterKey !== opts.key) { this._filterKey = opts.key; this._filterText = ''; this._sort = null; this._page = 1; }
+		view._filterOpts = opts;
+		if (view._filterBound) return view._filterApply();
+		view._filterBound = true;
+		const value = (row, col) => { const c = row.children[col], v = c && c.querySelector('[data-v]'); return v ? v.dataset.v : (c ? c.textContent.trim() : ''); };
+		const compare = (x, y) => (/^-?\d/.test(x) && /^-?\d/.test(y)) ? parseFloat(x) - parseFloat(y) : x.localeCompare(y);
+		const apply = view._filterApply = () => {
+			const o = view._filterOpts, items = view.querySelectorAll(o.items);
+			observer.disconnect();
+			let bar = view.querySelector('.fa-filterbar');
+			const title = view.querySelector('.fa-title');
+			if (items.length && !bar && title) {
+				title.insertAdjacentHTML('afterend', '<div class="fa-filterbar"><input class="fa-filter" type="search" autocomplete="off" /><span class="fa-filtercount"></span><span class="fa-pager"></span></div><div class="fa-msg fa-filterempty" hidden>Nothing matches your search.</div>');
+				bar = view.querySelector('.fa-filterbar');
+			}
+			if (bar) {
+				const box = bar.querySelector('input'), text = this._filterText || '', q = text.trim().toLowerCase();
+				box.placeholder = o.placeholder;
+				if (box.value !== text) box.value = text;
+				if (this._filterFocus && document.activeElement !== box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+				let list = [...items];
+				if (o.table) {
+					list.forEach((r, i) => { if (r._i === undefined) r._i = i; });
+					const sort = this._sort;
+					list.sort((x, y) => sort ? compare(value(x, sort.col), value(y, sort.col)) * sort.dir : x._i - y._i);
+					const body = list[0] && list[0].parentNode;
+					if (body) list.forEach((r) => body.appendChild(r));
+					view.querySelectorAll('.fa-table thead th').forEach((th, i) => { th.classList.toggle('sortable', !!th.textContent.trim()); th.classList.toggle('asc', !!sort && sort.col === i && sort.dir > 0); th.classList.toggle('desc', !!sort && sort.col === i && sort.dir < 0); });
+				}
+				const match = list.filter((el) => !q || el.textContent.toLowerCase().includes(q));
+				const size = this._pageSize || 25, pages = Math.max(1, Math.ceil(match.length / size));
+				if ((this._page || 1) > pages) this._page = pages;
+				const page = this._page || 1, shownRows = o.table ? match.slice((page - 1) * size, page * size) : match;
+				list.forEach((el) => { el.hidden = true; });
+				shownRows.forEach((el) => { el.hidden = false; });
+				bar.querySelector('.fa-filtercount').textContent = q ? 'Showing ' + match.length + ' of ' + items.length : '';
+				bar.querySelector('.fa-pager').innerHTML = (o.table && items.length > 10)
+					? '<select class="fa-pagesize" aria-label="Rows per page">' + [10, 25, 50, 100].map((n) => '<option' + (n === size ? ' selected' : '') + '>' + n + '</option>').join('') + '</select> per page ' +
+						'<button type="button" class="fa-pageprev" ' + (page <= 1 ? 'disabled' : '') + ' aria-label="Previous page">&lsaquo;</button> ' + (match.length ? (page - 1) * size + 1 : 0) + '&ndash;' + Math.min(page * size, match.length) + ' of ' + match.length +
+						' <button type="button" class="fa-pagenext" ' + (page >= pages ? 'disabled' : '') + ' aria-label="Next page">&rsaquo;</button>' : '';
+				view.querySelector('.fa-filterempty').hidden = !(q && !match.length);
+				view.querySelectorAll('.fa-chipstrip .fa-chip').forEach((c) => c.classList.toggle('active', c.dataset.q.toLowerCase() === q));
+			}
+			observer.observe(view, {childList: true, subtree: true});
+		};
+		const observer = new MutationObserver(apply);
+		view.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('fa-filter')) { this._filterText = e.target.value; this._filterFocus = true; this._page = 1; apply(); } });
+		view.addEventListener('change', (e) => { if (e.target.classList && e.target.classList.contains('fa-pagesize')) { this._pageSize = Number(e.target.value); this._page = 1; apply(); } });
+		view.addEventListener('click', (e) => {
+			const t = e.target.closest ? e.target : e.target.parentElement;
+			const chip = t.closest('.fa-chipstrip .fa-chip'), th = t.closest('.fa-table thead th'), nav = t.closest('.fa-pageprev, .fa-pagenext');
+			if (chip) { this._filterText = chip.dataset.q; this._filterFocus = false; this._page = 1; apply(); }
+			else if (nav) { this._page = (this._page || 1) + (nav.classList.contains('fa-pagenext') ? 1 : -1); apply(); }
+			else if (th && view._filterOpts.table && th.textContent.trim()) {
+				const col = [...th.parentNode.children].indexOf(th);
+				this._sort = (this._sort && this._sort.col === col) ? {col, dir: -this._sort.dir} : {col, dir: 1};
+				this._page = 1;
+				apply();
+			}
+		});
+		view.addEventListener('pointerdown', (e) => { if (!(e.target.closest && e.target.closest('.fa-filterbar'))) this._filterFocus = false; });
+		apply();
+	}
+
+	// A small "are you sure" box that replaces the browser's confirm dialog.
+	confirmBox(text) {
+		return new Promise((resolve) => {
+			const el = document.createElement('div');
+			el.className = 'fa-confirm';
+			el.tabIndex = -1;
+			el.innerHTML = '<div class="fa-confirmbox" role="dialog" aria-modal="true"><h3>Are you sure?</h3><p>' + esc(text) + '</p><div class="fa-confirmbtns"><button type="button" class="fa-chip" data-r="0">Cancel</button><button type="button" class="fa-btn danger" data-r="1">Delete</button></div></div>';
+			const done = (v) => { el.remove(); resolve(v); };
+			el.addEventListener('click', (e) => { const r = e.target.closest('[data-r]'); if (r) done(r.dataset.r === '1'); else if (e.target === el) done(false); });
+			el.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(false); });
+			this.appendChild(el);
+			el.querySelector('[data-r="0"]').focus();
+		});
+	}
+
 	bindFlightAlerts(view) {
 		if (view.dataset.flightAlertsBound) return;
 		view.dataset.flightAlertsBound = 'true';
@@ -272,10 +359,12 @@ class FlightStatusApp extends HTMLElement {
 			return;
 		}
 
+		if (params.get('flightTicket')) { params.delete('flightTicket'); history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '')); }
 		const adminMode = admin && !viewingSite;
 		const tab = params.get('tab') || 'dashboard';
 		this._adminTab = tab;
-		const links = adminMode
+		const sidebarMode = adminMode && current === 'admin';
+		const links = sidebarMode ? '' : adminMode
 			? [['dashboard', 'Dashboard'], ['flights', 'Flights'], ['airports', 'Airports'], ['gates', 'Gates'], ['reservations', 'Reservations']]
 				.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${current === 'admin' && tab === t[0] ? 'active' : ''}">${t[1]}</a>`).join('') +
 				`<a href="${root}/live-map" class="${current === 'live' ? 'active' : ''}">Live Map</a>` +
@@ -290,12 +379,16 @@ class FlightStatusApp extends HTMLElement {
 		const crumbs = (!adminMode && crumbLabel && !['home', 'login', 'register'].includes(current))
 			? '<nav class="fa-crumbs" aria-label="Breadcrumb"><a href="' + root + '/home">Home</a><span>&rsaquo;</span><b>' + esc(crumbLabel) + '</b></nav>' : '';
 
+		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users']];
+		const sidebar = sidebarMode ? '<aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
+			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '';
+		this.classList.toggle('has-sidebar', sidebarMode);
 		this.innerHTML =
 			'<header class="fa-header"><div class="fa-nav"><a class="fa-brand" href="' + root + (adminMode ? '/admin' : '/home') + '"><span class="fa-logo">' + ICONS.plane + '</span>Flight Status <b>' + (adminMode ? 'Admin' : 'Portal') + '</b></a>' +
 			'<button class="fa-burger" type="button" aria-label="Menu">&#9776;</button>' +
 			'<nav class="fa-links">' + links + this.authLinks(root, current) + '</nav></div></header>' +
 			crumbs +
-			'<main class="fa-view"><div class="fa-skel"><i></i><i></i><i></i></div></main>' +
+			(sidebarMode ? '<div class="fa-adminshell">' + sidebar + '<main class="fa-view"><div class="fa-skel"><i></i><i></i><i></i></div></main></div>' : '<main class="fa-view"><div class="fa-skel"><i></i><i></i><i></i></div></main>') +
 			'<footer class="fa-footer"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span class="fa-sep">&middot;</span>' + footerLinks +
 			'<span class="fa-sep">&middot;</span><button type="button" class="fa-legal" data-legal="privacy">Privacy</button><button type="button" class="fa-legal" data-legal="terms">Terms</button><button type="button" class="fa-legal" data-legal="cookies">Cookies</button></footer>';
 		this.classList.toggle('has-crumbs', !!crumbs);
@@ -741,22 +834,43 @@ class FlightStatusApp extends HTMLElement {
 		]);
 		const airports = airportsRaw.items, gates = gatesRaw.items, flights = flightsRaw.items, bookings = bookingsRaw.items;
 		let passes = [], reservations = [];
-		if (tab === 'reservations') { try { passes = (await this.json('/o/c/boardingpasses/scopes/' + SITE_ID() + '?pageSize=200')).items || []; } catch (e) {} }
+		if (tab === 'reservations' || tab === 'dashboard') { try { passes = (await this.json('/o/c/boardingpasses/scopes/' + SITE_ID() + '?pageSize=200')).items || []; } catch (e) {} }
 		const apById = Object.fromEntries(airports.map((a) => [a.id, a]));
 		const tabs = [['dashboard', 'Dashboard'], ['flights', 'Flights (' + flights.length + ')'], ['airports', 'Airports (' + airports.length + ')'], ['gates', 'Gates (' + gates.length + ')'], ['bookings', 'Bookings (' + bookings.length + ')'], ['reservations', 'Reservations']];
 
 		let body = '';
 		if (tab === 'dashboard') {
-			const delayed = flights.filter((f) => f.showstatus && f.showstatus.key === 'Delayed').length;
-			body = '<div class="fa-stats" style="margin:0 0 1.5rem">' +
-				[['plane', flights.length, 'Flights'], ['building', airports.length, 'Airports'], ['gate', gates.length, 'Gates'], ['clock', delayed, 'Delayed flights']]
-					.map((s) => `<div class="fa-stat"><span class="fa-ico">${ICONS[s[0]]}</span><div><b>${s[1]}</b><span>${s[2]}</span></div></div>`).join('') + '</div>' +
-				'<div class="fa-adminbtns"><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button><button class="fa-btn block-auto" data-add="airports">+ Add Airport</button><button class="fa-btn block-auto" data-add="gates">+ Add Gate</button><button class="fa-btn block-auto" data-add="bookings">+ Add Booking</button></div>';
+			const isDelayed = (f) => (f.showstatus && f.showstatus.key === 'Delayed') || Number(f.delayMinutes) > 0;
+			const colors = {ontime: '#1f9d55', delayed: '#d64545', boarding: '#e0a800', departed: '#1146d6', landed: '#6b7790', cancelled: '#444b5e'};
+			const byStatus = {};
+			flights.forEach((f) => { const n = f.showstatus ? f.showstatus.name : 'Unknown'; byStatus[n] = (byStatus[n] || 0) + 1; });
+			let acc = 0;
+			const stops = Object.entries(byStatus).map(([n, c]) => { const from = acc / (flights.length || 1) * 100; acc += c; return (colors[statusClass(n)] || '#9aa6c0') + ' ' + from + '% ' + acc / (flights.length || 1) * 100 + '%'; }).join(',');
+			const days = {};
+			flights.forEach((f) => { const k = String(f.departureTime).slice(0, 10); days[k] = (days[k] || 0) + 1; });
+			const dayList = Object.entries(days).sort().slice(-8), maxDay = Math.max(...dayList.map((d) => d[1]), 1);
+			const late = flights.filter(isDelayed).sort((x, y) => (Number(y.delayMinutes) || 0) - (Number(x.delayMinutes) || 0)).slice(0, 6);
+			const waiting = bookings.filter((x) => x.bookingStatus !== 'CheckedIn' && !passes.some((p) => p.pnr === x.pnr));
+			const events = [];
+			bookings.forEach((x) => events.push({t: Date.parse(x.dateCreated) || 0, icon: 'ticket', text: 'Booking <b>' + esc(x.pnr) + '</b> for ' + esc(x.firstName + ' ' + x.lastName) + ' on ' + esc(x.flightNumber)}));
+			passes.forEach((p) => events.push({t: Date.parse(p.dateCreated) || 0, icon: 'users', text: esc(p.creator ? p.creator.name : 'A passenger') + ' checked in <b>' + esc(p.pnr) + '</b>, seat ' + esc(p.seat)}));
+			events.sort((x, y) => y.t - x.t);
+			const tiles = [['plane', flights.length, 'Flights'], ['clock', flights.filter(isDelayed).length, 'Delayed flights'], ['ticket', bookings.length, 'Bookings'], ['users', passes.length, 'Checked in'], ['building', airports.length, 'Airports'], ['gate', gates.length, 'Gates']];
+			body = '<div class="fa-adminbtns"><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button><button class="fa-btn block-auto" data-add="bookings">+ Add Booking</button><button class="fa-btn block-auto" data-add="airports">+ Add Airport</button><button class="fa-btn block-auto" data-add="gates">+ Add Gate</button></div>' +
+				'<div class="fa-dashtiles">' + tiles.map((t) => `<div class="fa-stat"><span class="fa-ico">${ICONS[t[0]]}</span><div><b>${t[1]}</b><span>${t[2]}</span></div></div>`).join('') + '</div>' +
+				'<div class="fa-dashgrid">' +
+				'<section class="fa-dashcard"><h3>Flights by status</h3><div class="fa-donutwrap"><div class="fa-donut" style="background:conic-gradient(' + (stops || '#e3e9f6 0% 100%') + ')"><span>' + flights.length + '<small>flights</small></span></div><ul class="fa-legend">' +
+					Object.entries(byStatus).map(([n, c]) => `<li><i style="background:${colors[statusClass(n)] || '#9aa6c0'}"></i>${esc(n)} <b>${c}</b></li>`).join('') + '</ul></div></section>' +
+				'<section class="fa-dashcard"><h3>Flights by day</h3><div class="fa-dbars">' + (dayList.map((d) => `<div class="fa-dbar"><b>${d[1]}</b><i style="height:${Math.max(6, d[1] / maxDay * 100)}%"></i><span>${esc(new Date(d[0] + 'T00:00:00Z').toLocaleDateString([], {day: 'numeric', month: 'short', timeZone: 'UTC'}))}</span></div>`).join('') || '<p class="fa-panelnote">No flights yet.</p>') + '</div></section>' +
+				'<section class="fa-dashcard"><h3>Needs attention</h3><h4>Delayed flights (' + flights.filter(isDelayed).length + ')</h4>' + (late.length ? late.map((f) => `<div class="fa-late"><div><b>${esc(f.flightNumber)}</b><span>${esc(fmtDate(f.departureTime))}</span></div><em>${Number(f.delayMinutes) > 0 ? '+' + esc(f.delayMinutes) + ' min' : esc(f.showstatus ? f.showstatus.name : '')}</em></div>`).join('') : '<p class="fa-panelnote">No delays right now.</p>') +
+					'<h4>Not checked in (' + waiting.length + ')</h4>' + (waiting.slice(0, 5).map((x) => `<div class="fa-late"><div><b>${esc(x.pnr)}</b><span>${esc(x.firstName + ' ' + x.lastName)}</span></div><em class="muted">${esc(x.flightNumber)}</em></div>`).join('') || '<p class="fa-panelnote">Everyone has checked in.</p>') + '</section>' +
+				'<section class="fa-dashcard"><h3>Recent activity</h3>' + (events.slice(0, 8).map((e) => `<div class="fa-event"><span class="fa-ico sm">${ICONS[e.icon]}</span><div>${e.text}<small>${e.t ? esc(new Date(e.t).toLocaleString([], {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})) : ''}</small></div></div>`).join('') || '<p class="fa-panelnote">Nothing yet.</p>') + '</section>' +
+				'</div>';
 		} else if (tab === 'flights') {
 			body = '<div class="fa-head"><h2>Flights</h2><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button></div>' +
 				this.adminTable(['Flight', 'Route', 'Departure', 'Status', 'Delay', 'Bookings'], flights.map((f) => {
 					const o = apById[f.r_originAirport_c_airportId], d = apById[f.r_destinationAirport_c_airportId];
-					return [f.id, [esc(f.flightNumber) + (airlineOf(f.flightNumber, f.airline) ? '<br><small>' + esc(airlineOf(f.flightNumber, f.airline)) + '</small>' : ''), esc((o ? o.code : '?') + ' → ' + (d ? d.code : '?')), fmtDate(f.departureTime) + ' ' + fmtTime(f.departureTime),
+					return [f.id, [esc(f.flightNumber) + (airlineOf(f.flightNumber, f.airline) ? '<br><small>' + esc(airlineOf(f.flightNumber, f.airline)) + '</small>' : ''), esc((o ? o.code : '?') + ' → ' + (d ? d.code : '?')), '<span data-v="' + (Date.parse(f.departureTime) || 0) + '">' + fmtDate(f.departureTime) + ' ' + fmtTime(f.departureTime) + '</span>',
 						'<span class="fa-badge ' + statusClass(f.showstatus ? f.showstatus.name : '') + '">' + esc(f.showstatus ? f.showstatus.name : '') + '</span>', (f.delayMinutes || 0) + ' min', String(bookings.filter((b) => String(b.flightId) === String(f.id) || (!b.flightId && b.flightNumber === f.flightNumber)).length)]];
 				}));
 		} else if (tab === 'bookings') {
@@ -764,7 +878,7 @@ class FlightStatusApp extends HTMLElement {
 				this.adminTable(['PNR', 'Passenger', 'Flight', 'Date', 'Route', 'Class', 'Status'], bookings.map((b) => {
 					const f = flights.find((x) => String(x.id) === String(b.flightId)) || flights.find((x) => x.flightNumber === b.flightNumber) || {};
 					const o = apById[f.r_originAirport_c_airportId], d = apById[f.r_destinationAirport_c_airportId], air = airlineOf(b.flightNumber, f.airline);
-					return [b.id, [esc(b.pnr), esc(b.firstName + ' ' + b.lastName), esc(b.flightNumber + (air ? ' · ' + air : '')), esc(f.departureTime ? fmtDate(f.departureTime) + ' ' + fmtTime(f.departureTime) : '?'),
+					return [b.id, [esc(b.pnr), esc(b.firstName + ' ' + b.lastName), esc(b.flightNumber + (air ? ' · ' + air : '')), '<span data-v="' + (Date.parse(f.departureTime) || 0) + '">' + esc(f.departureTime ? fmtDate(f.departureTime) + ' ' + fmtTime(f.departureTime) : '?') + '</span>',
 						esc(o && d ? o.code + ' → ' + d.code : '?'), esc(CLASS_LABEL[classOf(b.travelClass)]),
 						'<span class="fa-badge ' + (b.bookingStatus === 'CheckedIn' ? 'landed' : b.bookingStatus === 'Cancelled' ? 'delayed' : 'ontime') + '">' + esc(b.bookingStatus === 'CheckedIn' ? 'Checked in' : b.bookingStatus) + '</span>']];
 				}));
@@ -796,9 +910,17 @@ class FlightStatusApp extends HTMLElement {
 				this.adminTable(E.cols.map((c) => c[1]), items.map((it) => [it.id, E.cols.map((c) => esc(it[c[0]]))]));
 		}
 
+		const count = (list, pick) => { const m = {}; list.forEach((x) => { const k = pick(x); if (k) m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((x, y) => y[1] - x[1]); };
+		const chips = (pairs) => '<div class="fa-chipstrip"><button type="button" class="fa-chip active" data-q="">All</button>' + pairs.map((p) => `<button type="button" class="fa-chip" data-q="${esc(p[0])}">${esc(p[2] || p[0])} (${p[1]})</button>`).join('') + '</div>';
+		if (tab === 'flights') body = chips(count(flights, (f) => f.showstatus && f.showstatus.name)) + body;
+		else if (tab === 'airports') body = chips(count(airports, (a) => a.country)) + body;
+		else if (tab === 'gates') body = chips(count(gates, (g) => g.terminal).map((p) => [p[0], p[1], 'Terminal ' + p[0]])) + body;
+		else if (tab === 'bookings') body = chips(count(bookings, (b) => b.bookingStatus).map((p) => [p[0] === 'CheckedIn' ? 'Checked in' : p[0], p[1]])) + body;
 		view.innerHTML = '<div class="fa-title"><h1>Admin Portal</h1><p>Manage flights, airports, gates and bookings. Changes appear on the public pages straight away.</p></div>' +
 			(notice ? `<div class="fa-notice ${notice.error ? 'error' : ''}">${esc(notice.text)}</div>` : '') + body;
 
+		const adminSearch = {flights: 'Search flight, airline, route or status', airports: 'Search airport code, name, city or country', gates: 'Search gate or terminal', bookings: 'Search PNR, passenger, flight or status'};
+		if (adminSearch[tab]) this.setupFilter(view, {key: 'admin-' + tab, items: '.fa-table tbody tr', placeholder: adminSearch[tab], table: true});
 		if (tab === 'reservations') this.bindReservations(view, reservations);
 		view.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => this.adminForm(view, b.dataset.add, null, {airports, flights, gates, bookings})));
 		view.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
@@ -806,7 +928,7 @@ class FlightStatusApp extends HTMLElement {
 			this.adminForm(view, tab, list.find((x) => String(x.id) === b.dataset.edit), {airports, flights, gates, bookings});
 		}));
 		view.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
-			if (!confirm('Delete this ' + ENT[tab].label.toLowerCase() + '? This cannot be undone.')) return;
+			if (!(await this.confirmBox('Delete this ' + ENT[tab].label.toLowerCase() + '? This cannot be undone.'))) return;
 			try {
 				await this.apiWrite('DELETE', ENT[tab].item + b.dataset.del);
 				this._airports = null;
@@ -840,7 +962,7 @@ class FlightStatusApp extends HTMLElement {
 	adminTable(headers, rows) {
 		if (!rows.length) return '<div class="fa-msg">Nothing here yet. Use the Add button.</div>';
 		return '<div class="fa-tablewrap"><table class="fa-table"><thead><tr>' + headers.map((h) => '<th>' + h + '</th>').join('') + '<th></th></tr></thead><tbody>' +
-			rows.map((r) => '<tr>' + r[1].map((c) => '<td>' + c + '</td>').join('') + `<td class="fa-actions"><button class="fa-link" data-edit="${r[0]}">Edit</button><button class="fa-link danger" data-del="${r[0]}">Delete</button></td></tr>`).join('') +
+			rows.map((r) => '<tr>' + r[1].map((c) => '<td>' + c + '</td>').join('') + `<td class="fa-actions"><button class="fa-iconbtn" data-edit="${r[0]}" title="Edit" aria-label="Edit"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><button class="fa-iconbtn danger" data-del="${r[0]}" title="Delete" aria-label="Delete"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button></td></tr>`).join('') +
 			'</tbody></table></div>';
 	}
 
@@ -1055,28 +1177,57 @@ class FlightStatusApp extends HTMLElement {
 			'<p class="fa-alt">Don\'t have an account? <a href="' + this._root + '/register">Create a new account</a></p>');
 		fillAllPhotos(view);
 		this.pwdToggle(view);
-		const form = view.querySelector('form'), err = view.querySelector('.fa-error');
+		// Two steps: password first, then the 6-digit code we e-mail. After the code the server gives a short login ticket (a JWT).
+		const form = view.querySelector('form');
+		let challenge = '';
+		const codeStep = (sent) => '<p class="fa-hint">We sent a 6-digit code to <b>' + esc(sent) + '</b>. It works for 5 minutes.</p>' +
+			'<label>Login code<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required placeholder="123456" /></label>' +
+			'<div class="fa-error" hidden></div><button class="fa-btn block" type="submit">VERIFY AND LOG IN</button>' +
+			'<p class="fa-alt"><a href="#" class="fa-resend">Send the code again</a> &middot; <a href="#" class="fa-back">Use a different account</a></p>';
 		form.addEventListener('submit', async (e) => {
 			e.preventDefault();
+			const err = form.querySelector('.fa-error'), btn = form.querySelector('button[type=submit]');
 			err.hidden = true;
-			const btn = form.querySelector('button[type=submit]');
 			btn.disabled = true;
 			try {
-				const home = this._root + '/home';
-				const res = await this.post(await this.loginUrl('%2Flogin%2Flogin'), {login: form.login.value, password: form.password.value, rememberMe: form.rememberMe.checked ? 'true' : 'false', saveLastPath: 'false', redirect: home});
-				const signInPath = await this.signInPath();
-				if (res.ok && !new URL(res.url).pathname.startsWith(signInPath)) {
-					location.href = home;
+				const data = challenge ? await this.authCall('/verify', {challenge, code: form.code.value.trim()}) : await this.authCall('/login', {email: form.login.value.trim(), password: form.password.value});
+				if (data.ticket) {
+					location.href = this._root + '/home?flightTicket=' + encodeURIComponent(data.ticket);
 					return;
 				}
-				err.textContent = 'Incorrect email or password.';
+				challenge = data.challenge;
+				form.innerHTML = codeStep(data.sent);
+				form.code.focus();
 			} catch (x) {
-				err.textContent = 'Could not sign in: ' + x.message;
+				err.textContent = x.message;
+				err.hidden = false;
+				btn.disabled = false;
+			}
+		});
+		form.addEventListener('click', async (e) => {
+			const link = e.target.closest('.fa-resend, .fa-back');
+			if (!link) return;
+			e.preventDefault();
+			if (link.classList.contains('fa-back')) return this.view_login(view);
+			const err = form.querySelector('.fa-error');
+			try {
+				await this.authCall('/resend', {challenge});
+				err.textContent = 'A new code was sent.';
+			} catch (x) {
+				err.textContent = x.message;
 			}
 			err.hidden = false;
-			btn.disabled = false;
 		});
 	}
+
+	async authCall(path, body) {
+		const res = await fetch('/o/flight-auth' + path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+		let data = {};
+		try { data = await res.json(); } catch (e) {}
+		if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+		return data;
+	}
+
 
 	async view_register(view) {
 		if (Liferay.ThemeDisplay.isSignedIn()) {
@@ -1272,6 +1423,7 @@ class FlightStatusApp extends HTMLElement {
 			draw();
 		};
 		await load();
+		this.setupFilter(view, {key: 'flights', items: '.fa-fcard', placeholder: 'Search flight, airline, city or status'});
 		clearInterval(this._timer);
 		this._timer = setInterval(() => load().catch(() => {}), 30000);
 	}
@@ -1400,6 +1552,7 @@ class FlightStatusApp extends HTMLElement {
 				(followed.length ? followed.map((flight) => this.flightRow(flight, ap)).join('') : '<p class="fa-msg">You are not following any flights yet. Browse <a href="' + this._root + '/flight-status">flight status</a> and choose “Get email alerts”.</p>');
 		};
 		await load();
+		this.setupFilter(view, {key: 'alerts', items: '.fa-fcard', placeholder: 'Search your followed flights'});
 		clearInterval(this._timer);
 		this._timer = setInterval(() => load().catch(() => {}), 30000);
 	}
@@ -1411,6 +1564,7 @@ class FlightStatusApp extends HTMLElement {
 		view.innerHTML = '<div class="fa-title"><h1>Airports</h1><p>' + list.length + ' airports in our network.</p></div><div class="fa-grid">' +
 			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span><small>${count(a.id)} flight(s) today</small></div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p>';
 		fillAllPhotos(view);
+		this.setupFilter(view, {key: 'airports', items: '.fa-card', placeholder: 'Search airport code, name, city or country'});
 	}
 
 
@@ -1603,6 +1757,7 @@ class FlightStatusApp extends HTMLElement {
 				list.map((p, i) => `<tr><td><b>${esc(p.flightNumber)}</b>${this._airlines && this._airlines[p.flightNumber] ? '<br><small>' + esc(this._airlines[p.flightNumber]) + '</small>' : ''}</td><td>${esc(p.origin)} → ${esc(p.destination)}</td><td>${esc(fmtDate(p.departureTime))} ${fmtTime(p.departureTime)}</td><td>${esc(p.seat)}</td><td>${esc(p.pnr)}</td><td><button class="fa-chip" data-i="${i}">View</button></td></tr>`).join('') +
 				'</tbody></table></div><div class="fa-bpresult"></div>';
 			box.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', () => showPass(box.querySelector('.fa-bpresult'), list[Number(b.dataset.i)])));
+			this.setupFilter(view, {key: 'passes', items: '.fa-table tbody tr', placeholder: 'Search PNR, flight or route'});
 		};
 
 		draw();
@@ -1700,6 +1855,7 @@ class FlightStatusApp extends HTMLElement {
 		view.innerHTML = '<div class="fa-title"><h1>Gates</h1><p>' + items.length + ' gates across ' + Object.keys(terminals).length + ' terminals.</p></div>' +
 			(Object.keys(terminals).sort().map((t) => `<section class="fa-section"><div class="fa-head"><h2>Terminal ${esc(t)}</h2></div><div class="fa-grid">` +
 				terminals[t].map((g) => `<div class="fa-card"><span class="fa-ico">${ICONS.gate}</span><b>Gate ${esc(g.gateNumber)}</b><span>Terminal ${esc(g.terminal)}</span></div>`).join('') + '</div></section>').join('') || '<div class="fa-msg">No gates found.</div>');
+		this.setupFilter(view, {key: 'gates', items: '.fa-card', placeholder: 'Search gate or terminal'});
 	}
 }
 
