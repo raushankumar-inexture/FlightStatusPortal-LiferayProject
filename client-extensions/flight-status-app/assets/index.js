@@ -83,13 +83,34 @@ const cityPhoto = (city, country) => {
 	}
 	return photoCache[key];
 };
+// Aviation photos saved in assets/hero (credits: Wikimedia Commons). One is picked at random on each page load, never the same one twice in a row.
+const HERO_PHOTOS = [
+	['1.jpg', 'Jordi Cucurull', 'CC BY-SA 2.0'], ['2.jpg', 'Harry Knight', 'CC0'], ['3.jpg', 'Bahnfrend', 'CC BY-SA 4.0'], ['4.jpg', 'SuFlyer', 'CC0'],
+	['5.jpg', 'Timothy A. Gonsalves', 'CC BY-SA 4.0'], ['6.jpg', 'Timothy A. Gonsalves', 'CC BY-SA 4.0'], ['7.jpg', 'Biswarup Ganguly', 'CC BY 3.0'], ['8.jpg', 'Sunnya343', 'CC BY-SA 4.0'],
+	['9.jpg', 'Apurba Biswas', 'CC0'], ['10.jpg', 'ANKAN', 'CC BY-SA 4.0'], ['11.jpg', 'Josekuttypanackal', 'CC BY 3.0'], ['12.jpg', 'Krish Aarush', 'CC BY-SA 4.0'],
+	['13.jpg', 'iMahesh', 'CC BY-SA 4.0'], ['14.jpg', 'Wolfgang Moroder', 'CC BY-SA 3.0'], ['15.jpg', 'Bernard Gagnon', 'CC BY 4.0'], ['16.jpg', 'The Cosmonaut', 'CC BY-SA 2.5'],
+	['17.jpg', 'Diliff', 'CC BY-SA 3.0'], ['18.jpg', 'Diego Delso', 'CC BY-SA 4.0'], ['19.jpg', 'Johannes Groll', 'CC0'], ['20.jpg', 'Anna Tsolidou', 'CC BY-SA 4.0'],
+	['21.jpg', 'Sam Ferrara', 'CC0'], ['22.jpg', 'Martin Falbisoner', 'CC BY-SA 4.0'], ['23.jpg', 'Basile Morin', 'CC BY-SA 4.0'], ['24.jpg', 'Wilfredor', 'CC0'],
+	['25.jpg', 'Pierre Blaché', 'CC0'], ['26.jpg', 'Vyacheslav Argenberg', 'CC BY 4.0'],
+];
+const HERO = (() => {
+	let i = Math.floor(Math.random() * HERO_PHOTOS.length);
+	try {
+		if (i === Number(sessionStorage.getItem('faHero'))) i = (i + 1) % HERO_PHOTOS.length;
+		sessionStorage.setItem('faHero', i);
+	} catch (e) {}
+	return HERO_PHOTOS[i];
+})();
+const heroBg = (overlay) => overlay + ',url("/o/flight-status-app/hero/' + HERO[0] + '")';
 const showPhoto = (el, city, country, overlay) => cityPhoto(city, country).then((url) => {
 	if (url && el.isConnected) {
 		el.style.backgroundImage = (overlay ? overlay + ',' : '') + 'url("' + url + '")';
 		el.classList.add('has-photo');
 	}
 });
-const fillPhotos = (root) => root.querySelectorAll('[data-photo-city]').forEach((el) => showPhoto(el, el.dataset.photoCity, el.dataset.photoCountry || '', el.dataset.photoOverlay || ''));
+const fillPhotos = (root) => root.querySelectorAll('[data-hero]').forEach((el) => { el.style.backgroundImage = heroBg(el.dataset.photoOverlay); el.classList.add('has-photo'); });
+const fillCityPhotos = (root) => root.querySelectorAll('[data-photo-city]').forEach((el) => showPhoto(el, el.dataset.photoCity, el.dataset.photoCountry || '', el.dataset.photoOverlay || ''));
+const fillAllPhotos = (root) => { fillPhotos(root); fillCityPhotos(root); };
 const logoHtml = (flightNumber, airline, cls) => {
 	const a = AIRLINES.find((x) => x[1] === airline) || AIRLINES.find((x) => String(flightNumber).toUpperCase().startsWith(x[0]));
 	return a ? `<img class="fa-airlogo ${cls || ''}" alt="" src="https://pics.avs.io/120/120/${a[0]}.png">` : '';
@@ -263,7 +284,7 @@ class FlightStatusApp extends HTMLElement {
 				(admin ? `<a class="fa-auth" href="${root}/admin">Admin</a>` : '');
 		const footerLinks = adminMode
 			? '<span>Admin Portal</span>'
-			: ROUTES.filter(showRoute).map((r) => `<a href="${root}/${r.slug}">${r.label}</a>`).join('') + '<span class="fa-sep">&middot;</span><span>Live flight information</span>';
+			: ROUTES.filter(showRoute).map((r) => `<a href="${root}/${r.slug}">${r.label}</a>`).join('') + '<span class="fa-sep">&middot;</span><span>Live flight information</span><span class="fa-sep">&middot;</span><span>Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons</span>';
 
 		const crumbLabel = (ROUTES.find((r) => r.path === current) || {}).label;
 		const crumbs = (!adminMode && crumbLabel && !['home', 'login', 'register'].includes(current))
@@ -339,7 +360,7 @@ class FlightStatusApp extends HTMLElement {
 			banner.dataset.pb = '1';
 			const topics = {flights: 'Airliner', search: 'Air travel', airports: 'Airport', gates: 'Airport terminal', live: 'Air traffic control', ontime: 'Airline', board: 'Airport terminal'};
 			const topic = topics[this._currentRoute];
-			if (topic) showPhoto(banner, topic, '', 'linear-gradient(90deg, rgba(15,30,80,.9) 0%, rgba(15,30,80,.6) 55%, rgba(15,30,80,.22) 100%)');
+			if (topic) { banner.style.backgroundImage = heroBg('linear-gradient(90deg, rgba(15,30,80,.9) 0%, rgba(15,30,80,.6) 55%, rgba(15,30,80,.22) 100%)'); banner.classList.add('has-photo'); }
 		}
 		const items = view.querySelectorAll('.fa-reveal:not([data-seen])');
 		if (!items.length) return;
@@ -1032,7 +1053,7 @@ class FlightStatusApp extends HTMLElement {
 			'<div class="fa-authrow"><label class="fa-check"><input type="checkbox" name="rememberMe" checked /> Remember me</label><a class="fa-forgot" href="' + forgot + '">Forgot password?</a></div>' +
 			'<div class="fa-error" hidden></div><button class="fa-btn block" type="submit">LOG IN</button></form>',
 			'<p class="fa-alt">Don\'t have an account? <a href="' + this._root + '/register">Create a new account</a></p>');
-		fillPhotos(view);
+		fillAllPhotos(view);
 		this.pwdToggle(view);
 		const form = view.querySelector('form'), err = view.querySelector('.fa-error');
 		form.addEventListener('submit', async (e) => {
@@ -1070,7 +1091,7 @@ class FlightStatusApp extends HTMLElement {
 			'<label>Confirm password<span class="fa-pwd"><input name="password2" type="password" required autocomplete="new-password" /></span></label></div>' +
 			'<div class="fa-error" hidden></div><button class="fa-btn block" type="submit">CREATE ACCOUNT</button></form>',
 			'<p class="fa-alt">Already have an account? <a href="' + this._root + '/login">Log in</a></p>');
-		fillPhotos(view);
+		fillAllPhotos(view);
 		const form = view.querySelector('form'), err = view.querySelector('.fa-error');
 		form.addEventListener('submit', async (e) => {
 			e.preventDefault();
@@ -1159,10 +1180,10 @@ class FlightStatusApp extends HTMLElement {
 		const seen = new Set();
 		const routes = flights.filter((f) => !seen.has(routeKey(f)) && seen.add(routeKey(f))).slice(0, 8);
 		view.innerHTML =
-			'<section class="fa-herox"' + (star ? ' data-photo-city="' + esc(star.city) + '" data-photo-country="' + esc(star.country) + '" data-photo-overlay="linear-gradient(180deg, rgba(8,18,50,.30) 0%, rgba(8,18,50,.55) 55%, rgba(8,18,50,.86) 100%)"' : '') + '>' +
+			'<section class="fa-herox" data-hero="1" title="Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons" data-photo-overlay="linear-gradient(180deg, rgba(8,18,50,.30) 0%, rgba(8,18,50,.55) 55%, rgba(8,18,50,.86) 100%)">' +
 			'<div class="fa-herox-in"><span class="fa-pill">&#9679; Live flight tracking</span><h1>Know where your flight is, <em>before you leave</em></h1>' +
 			'<p>Live departures, arrivals, gates and delays across every airport we cover, plus real aircraft on the map.</p>' +
-			(star ? '<small class="fa-herocap">Featured destination: ' + esc(star.city) + '</small>' : '') + '</div></section>' +
+			'</div></section>' +
 			'<section class="fa-searchcard"><div class="fa-stabs"><button type="button" class="active" data-t="num">Flight number</button><button type="button" data-t="route">Route &amp; date</button><button type="button" data-t="board">Airport board</button></div>' +
 			'<form class="fa-sform" data-p="num"><input name="q" placeholder="Flight number, airline or city, e.g. AI101 or IndiGo" /><button class="fa-btn" type="submit">Search flight</button></form>' +
 			'<form class="fa-sform" data-p="route" hidden><label>From<select name="from">' + airportOpts('') + '</select></label><label>To<select name="to">' + airportOpts('') + '</select></label><label>Date<input type="date" name="date" /></label><button class="fa-btn" type="submit">Search flights</button></form>' +
@@ -1190,7 +1211,7 @@ class FlightStatusApp extends HTMLElement {
 			'<section class="fa-counters fa-reveal"><div><b data-count="' + flights.length + '">0</b><span>Flights tracked</span></div><div><b data-count="' + Object.keys(ap).length + '">0</b><span>Airports</span></div><div><b data-count="' + airlines.length + '">0</b><span>Airlines</span></div><div><b data-count="' + this.stats(flights, ap)[1].value.replace('%', '') + '" data-suffix="%">0</b><span>On-time rate</span></div></section>' +
 			'<section class="fa-cta"><div><h2>Ready to check your flight?</h2><p>Search by flight number or browse everything that is flying today.</p></div>' +
 			'<a class="fa-btn" href="' + r + '/search">Search flights</a></section>';
- 		fillPhotos(view);
+ 		fillAllPhotos(view);
 		this.bindMiniMaps(view);
 		const ck = view.querySelector('.fa-ckform');
 		ck.addEventListener('input', () => { ck.querySelector('button').disabled = !(ck.pnr.value.trim() && ck.last.value.trim()); });
@@ -1383,7 +1404,7 @@ class FlightStatusApp extends HTMLElement {
 		const count = (id) => flights.filter((f) => f.originAirportId == id || f.destinationAirportId == id).length;
 		view.innerHTML = '<div class="fa-title"><h1>Airports</h1><p>' + list.length + ' airports in our network.</p></div><div class="fa-grid">' +
 			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span><small>${count(a.id)} flight(s) today</small></div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p>';
-		fillPhotos(view);
+		fillAllPhotos(view);
 	}
 
 
@@ -1510,7 +1531,7 @@ class FlightStatusApp extends HTMLElement {
 					'<h4>Seats</h4><div class="fa-key">' + [['', 'Available'], ['paid', 'Paid seat'], ['leg', 'Extra legroom'], ['taken', 'Occupied'], ['mine', 'Your seat']].map((k) => '<span>' + seatSvg(k[0]) + k[1] + '</span>').join('') + '</div>' +
 					'<h4>Seat prices</h4><table class="fa-fees"><tr><td>Extra legroom (first row of a class)</td><td>&#8377;500</td></tr><tr><td>Window seat</td><td>&#8377;300</td></tr><tr><td>Aisle seat</td><td>&#8377;200</td></tr><tr><td>Middle seat</td><td>Free</td></tr></table>' +
 					'<div class="fa-summary"></div><div class="fa-error" hidden></div><button class="fa-btn" type="submit">Check in and get boarding pass</button></div>' +
-					'<div class="fa-ckcard fa-plane"><h3>' + esc(b.flightNumber) + ' &middot; Cabin</h3><div class="fa-seats"></div></div></form>';
+					'<div class="fa-ckcard fa-cabin"><h3>' + esc(b.flightNumber) + ' &middot; Cabin</h3><div class="fa-seats"></div></div></form>';
 			const form = step.querySelector('form'), err = form.querySelector('.fa-error'), grid = form.querySelector('.fa-seats');
 
 			const drawSeats = () => {
