@@ -360,6 +360,13 @@ class FlightStatusApp extends HTMLElement {
 		}
 
 		if (params.get('flightTicket')) { params.delete('flightTicket'); history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '')); }
+		try {
+			const phone = sessionStorage.getItem('faPendingPhone');
+			if (phone && Liferay.ThemeDisplay.isSignedIn()) {
+				sessionStorage.removeItem('faPendingPhone');
+				getFetch()('/o/flight-auth/phone', {method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({phone})}).catch(() => {});
+			}
+		} catch (e) {}
 		const adminMode = admin && !viewingSite;
 		const tab = params.get('tab') || 'dashboard';
 		this._adminTab = tab;
@@ -1180,10 +1187,11 @@ class FlightStatusApp extends HTMLElement {
 		// Two steps: password first, then the 6-digit code we e-mail. After the code the server gives a short login ticket (a JWT).
 		const form = view.querySelector('form');
 		let challenge = '';
-		const codeStep = (sent) => '<p class="fa-hint">We sent a 6-digit code to <b>' + esc(sent) + '</b>. It works for 5 minutes.</p>' +
+		const codeStep = (d) => '<p class="fa-hint">We sent a 6-digit code by ' + (d.via === 'sms' ? 'SMS' : 'email') + ' to <b>' + esc(d.sent) + '</b>. It works for 5 minutes.</p>' +
 			'<label>Login code<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required placeholder="123456" /></label>' +
 			'<div class="fa-error" hidden></div><button class="fa-btn block" type="submit">VERIFY AND LOG IN</button>' +
-			'<p class="fa-alt"><a href="#" class="fa-resend">Send the code again</a> &middot; <a href="#" class="fa-back">Use a different account</a></p>';
+			'<p class="fa-alt"><a href="#" class="fa-resend">Send the code again</a>' + (d.via === 'sms' ? ' &middot; <a href="#" class="fa-email">Send by email instead</a>' : '') + ' &middot; <a href="#" class="fa-back">Use a different account</a></p>';
+		const showStep = (d) => { form.innerHTML = codeStep(d); form.code.focus(); };
 		form.addEventListener('submit', async (e) => {
 			e.preventDefault();
 			const err = form.querySelector('.fa-error'), btn = form.querySelector('button[type=submit]');
@@ -1196,8 +1204,7 @@ class FlightStatusApp extends HTMLElement {
 					return;
 				}
 				challenge = data.challenge;
-				form.innerHTML = codeStep(data.sent);
-				form.code.focus();
+				showStep(data);
 			} catch (x) {
 				err.textContent = x.message;
 				err.hidden = false;
@@ -1205,14 +1212,17 @@ class FlightStatusApp extends HTMLElement {
 			}
 		});
 		form.addEventListener('click', async (e) => {
-			const link = e.target.closest('.fa-resend, .fa-back');
+			const link = e.target.closest('.fa-resend, .fa-back, .fa-email');
 			if (!link) return;
 			e.preventDefault();
 			if (link.classList.contains('fa-back')) return this.view_login(view);
 			const err = form.querySelector('.fa-error');
 			try {
-				await this.authCall('/resend', {challenge});
-				err.textContent = 'A new code was sent.';
+				const d = await this.authCall('/resend', {challenge, via: link.classList.contains('fa-email') ? 'email' : ''});
+				showStep(d);
+				form.querySelector('.fa-error').textContent = 'A new code was sent.';
+				form.querySelector('.fa-error').hidden = false;
+				return;
 			} catch (x) {
 				err.textContent = x.message;
 			}
@@ -1238,6 +1248,7 @@ class FlightStatusApp extends HTMLElement {
 			'<form class="fa-authform"><div class="fa-two"><label>First name<input name="firstName" required /></label><label>Last name<input name="lastName" required /></label></div>' +
 			'<label>Username<input name="screenName" required pattern="[A-Za-z0-9._-]+" title="Letters, numbers, dot, dash or underscore" /></label>' +
 			'<label>Email address<input name="emailAddress" type="email" required autocomplete="email" placeholder="name@domain.com" /></label>' +
+			'<label>Mobile number<input name="phone" type="tel" required autocomplete="tel" placeholder="+919876543210" /></label><p class="fa-hint">We text a login code to this number. Include the country code, or type a 10-digit Indian number.</p>' +
 			'<div class="fa-two"><label>Password<span class="fa-pwd"><input name="password1" type="password" required autocomplete="new-password" /></span></label>' +
 			'<label>Confirm password<span class="fa-pwd"><input name="password2" type="password" required autocomplete="new-password" /></span></label></div>' +
 			'<div class="fa-error" hidden></div><button class="fa-btn block" type="submit">CREATE ACCOUNT</button></form>',
@@ -1249,6 +1260,14 @@ class FlightStatusApp extends HTMLElement {
 			err.hidden = true;
 			if (form.password1.value !== form.password2.value) {
 				err.textContent = 'Passwords do not match.';
+				err.hidden = false;
+				return;
+			}
+			// +country code and digits; a plain 10-digit Indian number gets +91
+			let phone = form.phone.value.replace(/[\s()-]/g, '');
+			if (/^0?[6-9]\d{9}$/.test(phone)) phone = '+91' + phone.slice(-10);
+			if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+				err.textContent = 'Enter your mobile number with the country code, for example +919876543210.';
 				err.hidden = false;
 				return;
 			}
@@ -1265,6 +1284,13 @@ class FlightStatusApp extends HTMLElement {
 				const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
 				const alertBox = doc.querySelector('.alert-danger, .alert-error');
 				if (!alertBox) {
+					// Save the number now (the email and password prove who is asking); if that fails it is kept and saved on the next page.
+					try {
+						const saved = await fetch('/o/flight-auth/signup-phone', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({email: form.emailAddress.value.trim(), password: form.password1.value, phone})});
+						if (!saved.ok) sessionStorage.setItem('faPendingPhone', phone);
+					} catch (e) {
+						sessionStorage.setItem('faPendingPhone', phone);
+					}
 					location.href = home;
 					return;
 				}
@@ -1588,7 +1614,8 @@ class FlightStatusApp extends HTMLElement {
 		let qr = '';
 		try {
 			const code = window.qrcode(0, 'M');
-			code.addData(['FSP', p.pnr, p.flightNumber, p.seat, p.passengerName].join('|'));
+			// A link to the pass check page (signed, so it cannot be changed); the old text is used if the server sends no link
+			code.addData(p.checkUrl || ['FSP', p.pnr, p.flightNumber, p.seat, p.passengerName].join('|'));
 			code.make();
 			qr = code.createSvgTag(4);
 		} catch (e) {}
