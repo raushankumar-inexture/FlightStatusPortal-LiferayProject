@@ -1,8 +1,6 @@
 package com.flight.alerts;
 
 import com.liferay.expando.kernel.model.ExpandoColumn;
-import com.liferay.mail.kernel.model.MailMessage;
-import com.liferay.mail.kernel.service.MailServiceUtil;
 import com.liferay.expando.kernel.model.ExpandoColumnConstants;
 import com.liferay.expando.kernel.model.ExpandoTable;
 import com.liferay.expando.kernel.model.ExpandoTableConstants;
@@ -717,7 +715,36 @@ public class FlightAlertApplication extends Application {
 		}
 	}
 
-	/** Sends through Liferay's mail settings (any SMTP, for example Gmail), or through Twilio Email when that sender is configured. */
+	/**
+	 * A mail setting: the value in bundles/data/alert-smtp.properties wins (works however Liferay was
+	 * started, for example from an IDE), otherwise the environment variable of the same name.
+	 */
+	private static String _setting(String name) {
+		try {
+			File file = new File(PropsUtil.get(PropsKeys.LIFERAY_HOME) + "/data", "alert-smtp.properties");
+
+			if (file.exists()) {
+				Properties properties = new Properties();
+
+				try (java.io.InputStream in = Files.newInputStream(file.toPath())) {
+					properties.load(in);
+				}
+
+				String value = properties.getProperty(name);
+
+				if ((value != null) && !value.isBlank()) {
+					return value.trim();
+				}
+			}
+		}
+		catch (Exception exception) {
+			_log.warn("Could not read alert-smtp.properties: " + exception.getMessage());
+		}
+
+		return System.getenv(name);
+	}
+
+	/** Sends through the SMTP server in the settings above, or through Twilio Email when that sender is configured. */
 	private void _sendEmail(User user, FlightState flight, List<String> changes)
 		throws Exception {
 
@@ -729,14 +756,14 @@ public class FlightAlertApplication extends Application {
 			return;
 		}
 
-		String fromAddress = System.getenv("FLIGHT_ALERT_FROM_ADDRESS");
+		String fromAddress = _setting("FLIGHT_ALERT_FROM_ADDRESS");
 
 		if ((fromAddress == null) || fromAddress.isBlank()) {
 			fromAddress = PrefsPropsUtil.getString(
 				user.getCompanyId(), PropsKeys.ADMIN_EMAIL_FROM_ADDRESS);
 		}
 
-		String smtpHost = System.getenv("FLIGHT_ALERT_SMTP_HOST");
+		String smtpHost = _setting("FLIGHT_ALERT_SMTP_HOST");
 
 		StringBuilder html = new StringBuilder(
 			"<h2>Your followed flight has changed</h2><p><strong>Flight: ").
@@ -761,16 +788,9 @@ public class FlightAlertApplication extends Application {
 			return;
 		}
 
-		MailMessage message = new MailMessage(
-			new InternetAddress(fromAddress, "Flight Status Alerts"),
-			new InternetAddress(user.getEmailAddress(), user.getFullName()),
-			"Flight " + flight.flightNumber + " update", html.toString(), true);
-
-		MailServiceUtil.sendEmail(message);
-
-		_log.info(
-			"Flight alert for " + flight.flightNumber + " sent to " +
-				user.getEmailAddress());
+		throw new IllegalStateException(
+			"Email NOT sent to " + user.getEmailAddress() +
+				": SMTP is not configured (fill bundles/data/alert-smtp.properties)");
 	}
 
 	/**
@@ -782,9 +802,9 @@ public class FlightAlertApplication extends Application {
 			String host, String fromAddress, User user, String subject, String html)
 		throws Exception {
 
-		String port = System.getenv("FLIGHT_ALERT_SMTP_PORT");
-		String smtpUser = System.getenv("FLIGHT_ALERT_SMTP_USER");
-		String password = System.getenv("FLIGHT_ALERT_SMTP_PASSWORD");
+		String port = _setting("FLIGHT_ALERT_SMTP_PORT");
+		String smtpUser = _setting("FLIGHT_ALERT_SMTP_USER");
+		String password = _setting("FLIGHT_ALERT_SMTP_PASSWORD");
 		boolean auth = (smtpUser != null) && !smtpUser.isBlank();
 
 		Properties properties = new Properties();
@@ -794,7 +814,7 @@ public class FlightAlertApplication extends Application {
 		properties.put("mail.smtp.auth", String.valueOf(auth));
 		properties.put(
 			"mail.smtp.starttls.enable",
-			String.valueOf(!"false".equalsIgnoreCase(System.getenv("FLIGHT_ALERT_SMTP_STARTTLS"))));
+			String.valueOf(!"false".equalsIgnoreCase(_setting("FLIGHT_ALERT_SMTP_STARTTLS"))));
 		properties.put("mail.smtp.connectiontimeout", "10000");
 		properties.put("mail.smtp.timeout", "15000");
 
