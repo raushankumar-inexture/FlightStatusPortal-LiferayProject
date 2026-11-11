@@ -229,10 +229,17 @@ public class BoardingApplication extends Application {
                     return _error(400, "That seat is not in your " + travelClass + " class");
                 }
 
-                int fee = _seatFee(seat);
+                String bag = _bag(input.getString("bag"));
+                String meal = input.getString("meal").trim();
 
-                if ((fee > 0) && !_paid(input, String.valueOf(b.get("pnr")), seat, fee)) {
-                    return _error(402, "Payment for this seat was not completed");
+                if (!_addOnsOk(bag, meal)) {
+                    return _error(400, "Choose a valid baggage and meal option");
+                }
+
+                int total = _seatFee(seat) + _bagFee(bag) + _mealFee(meal);
+
+                if ((total > 0) && !_paid(input, String.valueOf(b.get("pnr")), seat, total, bag, meal)) {
+                    return _error(402, "Payment was not completed");
                 }
 
                 String flightNumber = String.valueOf(b.get("flightNumber"));
@@ -278,6 +285,8 @@ public class BoardingApplication extends Application {
                 pass.put("passengerName", b.get("firstName") + " " + b.get("lastName"));
                 pass.put("seat", seat);
                 pass.put("travelClass", travelClass);
+                pass.put("baggageKg", "0".equals(bag) ? "" : bag);
+                pass.put("meal", meal);
                 pass.put("origin", String.valueOf(origin.get("code")));
                 pass.put("originCity", String.valueOf(origin.get("city")));
                 pass.put("destination", String.valueOf(destination.get("code")));
@@ -345,23 +354,43 @@ public class BoardingApplication extends Application {
                 return _error(409, "This seat cannot be booked");
             }
 
+            String bag = _bag(input.getString("bag"));
+            String meal = input.getString("meal").trim();
+
+            if (!_addOnsOk(bag, meal)) {
+                return _error(400, "Choose a valid baggage and meal option");
+            }
+
             int fee = _seatFee(seat);
 
-            if (fee == 0) {
-                return _error(400, "This seat is free, no payment needed");
+            if ((fee + _bagFee(bag) + _mealFee(meal)) == 0) {
+                return _error(400, "Nothing to pay for");
             }
 
             String pnr = String.valueOf(booking.getValues().get("pnr"));
 
             String back = returnUrl + "?pnr=" + _enc(pnr) + "&last=" + _enc(input.getString("lastName"));
 
+            StringBuilder items = new StringBuilder();
+            int index = 0;
+
+            if (fee > 0) {
+                items.append(_item(index++, "Seat " + seat, fee));
+            }
+
+            if (_bagFee(bag) > 0) {
+                items.append(_item(index++, "Extra baggage +" + bag + " kg", _bagFee(bag)));
+            }
+
+            if (_mealFee(meal) > 0) {
+                items.append(_item(index++, "Meal: " + meal, _mealFee(meal)));
+            }
+
             JSONObject session = _stripe(
                 "POST", "/checkout/sessions",
-                "mode=payment&success_url=" + _enc(back + "&seat=" + seat + "&session_id={CHECKOUT_SESSION_ID}") +
-                    "&cancel_url=" + _enc(back) + "&line_items[0][quantity]=1&line_items[0][price_data][currency]=inr" +
-                        "&line_items[0][price_data][unit_amount]=" + (fee * 100) +
-                            "&line_items[0][price_data][product_data][name]=" + _enc("Seat " + seat) +
-                                "&metadata[pnr]=" + _enc(pnr) + "&metadata[seat]=" + seat);
+                "mode=payment&success_url=" + _enc(back + "&seat=" + seat + "&bag=" + bag + "&meal=" + meal + "&session_id={CHECKOUT_SESSION_ID}") +
+                    "&cancel_url=" + _enc(back) + items + "&metadata[pnr]=" + _enc(pnr) + "&metadata[seat]=" + seat +
+                        "&metadata[bag]=" + bag + "&metadata[meal]=" + _enc(meal));
 
             if (!session.has("url")) {
                 return _error(502, "Could not start the payment");
@@ -396,8 +425,8 @@ public class BoardingApplication extends Application {
         return ((letter == 'C') || (letter == 'D')) ? 200 : 0;
     }
 
-    /** True when Stripe says this session is paid, for this PNR and seat, with the right amount. */
-    private boolean _paid(JSONObject input, String pnr, String seat, int fee) throws Exception {
+    /** True when Stripe says this session is paid, for this PNR, seat, baggage and meal, with the right amount. */
+    private boolean _paid(JSONObject input, String pnr, String seat, int total, String bag, String meal) throws Exception {
         String sessionId = input.getString("sessionId");
 
         if (!sessionId.matches("cs_[A-Za-z0-9_]+")) {
@@ -407,15 +436,40 @@ public class BoardingApplication extends Application {
         JSONObject session = _stripe("GET", "/checkout/sessions/" + sessionId, null);
         JSONObject metadata = session.getJSONObject("metadata");
 
-        if (!"paid".equals(session.getString("payment_status")) || (session.getInt("amount_total") != (fee * 100)) ||
-            (metadata == null) || !pnr.equals(metadata.getString("pnr")) || !seat.equals(metadata.getString("seat"))) {
+        if (!"paid".equals(session.getString("payment_status")) || (session.getInt("amount_total") != (total * 100)) ||
+            (metadata == null) || !pnr.equals(metadata.getString("pnr")) || !seat.equals(metadata.getString("seat")) ||
+            !bag.equals(metadata.getString("bag")) || !meal.equals(metadata.getString("meal"))) {
 
             return false;
         }
 
-        _log.info("Seat payment " + sessionId + " for " + pnr + " seat " + seat + ": Rs " + fee);
+        _log.info("Payment " + sessionId + " for " + pnr + " seat " + seat + ", bag " + bag + ", meal '" + meal + "': Rs " + total);
 
         return true;
+    }
+
+    /** Extra baggage in kg ("0" when none) and its price in rupees. */
+    private static String _bag(String kg) {
+        kg = kg.trim();
+
+        return kg.isEmpty() ? "0" : kg;
+    }
+
+    private static int _bagFee(String kg) {
+        return "10".equals(kg) ? 800 : "20".equals(kg) ? 1500 : "30".equals(kg) ? 2000 : 0;
+    }
+
+    private static int _mealFee(String meal) {
+        return "veg".equals(meal) ? 250 : "nonveg".equals(meal) ? 300 : "snack".equals(meal) ? 150 : 0;
+    }
+
+    private static boolean _addOnsOk(String bag, String meal) {
+        return bag.matches("0|10|20|30") && meal.matches("|veg|nonveg|snack");
+    }
+
+    private static String _item(int index, String name, int rupees) throws Exception {
+        return "&line_items[" + index + "][quantity]=1&line_items[" + index + "][price_data][currency]=inr&line_items[" + index +
+            "][price_data][unit_amount]=" + (rupees * 100) + "&line_items[" + index + "][price_data][product_data][name]=" + _enc(name);
     }
 
     private static String _enc(String value) throws Exception {
@@ -685,12 +739,142 @@ public class BoardingApplication extends Application {
             _row(rows, "Class", HtmlUtil.escape((travelClass.isEmpty() || "null".equals(travelClass)) ? "Economy" : travelClass));
             _row(rows, "Flight status", HtmlUtil.escape(status.isEmpty() ? "Not available" : status));
 
+            String baggage = String.valueOf(v.get("baggageKg")).replace("null", "");
+            String mealCode = String.valueOf(v.get("meal")).replace("null", "");
+
+            if (!baggage.isEmpty()) {
+                _row(rows, "Extra baggage", "+" + HtmlUtil.escape(baggage) + " kg");
+            }
+
+            if (!mealCode.isEmpty()) {
+                _row(rows, "Meal", HtmlUtil.escape("veg".equals(mealCode) ? "Vegetarian" : "nonveg".equals(mealCode) ? "Non-vegetarian" : "Snack box"));
+            }
+
             return Response.ok(_checkPage(true, rows.toString())).header("Cache-Control", "no-store").build();
         }
         catch (Exception exception) {
             _log.error("Could not check the boarding pass", exception);
 
             return Response.status(500).entity(_checkPage(false, "")).build();
+        }
+    }
+
+    /** Gate staff (administrators only): the full details of a scanned boarding pass. */
+    @GET
+    @Path("/gate/lookup")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response gateLookup(@Context HttpServletRequest request, @QueryParam("code") String code) {
+        try {
+            if (_admin(request) == null) {
+                return _error(403, "Only administrators can use the gate screen");
+            }
+
+            ObjectEntry entry = _scannedPass(code);
+
+            if (entry == null) {
+                return _error(404, "This is not a valid boarding pass");
+            }
+
+            JSONObject json = _pass(entry, _baseUrl(request));
+
+            json.put("boardedAt", String.valueOf(entry.getValues().get("boardedAt")).replace("null", ""));
+
+            return Response.ok(json.toString()).build();
+        }
+        catch (Exception exception) {
+            _log.error("Gate lookup failed", exception);
+
+            return _error(500, "Could not check the boarding pass");
+        }
+    }
+
+    /** Gate staff (administrators only): marks the scanned boarding pass as boarded. */
+    @Consumes(MediaType.APPLICATION_JSON)
+    @POST
+    @Path("/gate/board")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response gateBoard(@Context HttpServletRequest request, String body) {
+        try {
+            User admin = _admin(request);
+
+            if (admin == null) {
+                return _error(403, "Only administrators can use the gate screen");
+            }
+
+            try {
+                AuthTokenUtil.checkCSRFToken(request, BoardingApplication.class.getName());
+            }
+            catch (PrincipalException principalException) {
+                return _error(403, "Please refresh the page and try again");
+            }
+
+            ObjectEntry entry = _scannedPass(JSONFactoryUtil.createJSONObject(body).getString("code"));
+
+            if (entry == null) {
+                return _error(404, "This is not a valid boarding pass");
+            }
+
+            Map<String, Serializable> values = new HashMap<>(entry.getValues());
+
+            String already = String.valueOf(values.get("boardedAt")).replace("null", "");
+
+            if (!already.isEmpty()) {
+                return _error(409, "Already boarded at " + already);
+            }
+
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+            format.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+            values.put("boardedAt", format.format(new Date()));
+
+            ServiceContext serviceContext = new ServiceContext();
+
+            serviceContext.setCompanyId(admin.getCompanyId());
+            serviceContext.setScopeGroupId(entry.getGroupId());
+            serviceContext.setUserId(admin.getUserId());
+
+            _objectEntryLocalService.updateObjectEntry(
+                admin.getUserId(), entry.getObjectEntryId(), entry.getObjectEntryFolderId(), values, serviceContext);
+
+            JSONObject out = JSONFactoryUtil.createJSONObject();
+
+            out.put("boardedAt", String.valueOf(values.get("boardedAt")));
+
+            return Response.ok(out.toString()).build();
+        }
+        catch (Exception exception) {
+            _log.error("Could not mark the pass as boarded", exception);
+
+            return _error(500, "Could not mark the pass as boarded");
+        }
+    }
+
+    /** The boarding pass behind a scanned QR link (or just its token); null when the code is wrong. */
+    private ObjectEntry _scannedPass(String code) throws Exception {
+        String token = (code == null) ? "" : code.trim();
+
+        int at = token.indexOf("t=");
+
+        if (at >= 0) {
+            token = token.substring(at + 2).split("[&#\\s]")[0];
+        }
+
+        long id = _passIdFromToken(token);
+
+        ObjectEntry entry = (id == 0) ? null : _objectEntryLocalService.fetchObjectEntry(id);
+
+        return ((entry != null) && (entry.getObjectDefinitionId() == _definition("C_BoardingPass").getObjectDefinitionId())) ? entry : null;
+    }
+
+    private User _admin(HttpServletRequest request) {
+        try {
+            User user = _user(request);
+
+            return ((user != null) && UserLocalServiceUtil.hasRoleUser(user.getCompanyId(), "Administrator", user.getUserId(), true)) ? user : null;
+        }
+        catch (Exception exception) {
+            return null;
         }
     }
 
@@ -774,7 +958,7 @@ public class BoardingApplication extends Application {
 
         for (String key : new String[] {
                 "pnr", "flightNumber", "passengerName", "seat", "origin", "originCity", "destination",
-                "destinationCity", "gate", "passengerEmail", "travelClass"
+                "destinationCity", "gate", "passengerEmail", "travelClass", "baggageKg", "meal"
             }) {
 
             json.put(key, String.valueOf(v.get(key)));
