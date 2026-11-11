@@ -30,6 +30,7 @@ const ICONS = {
 	users: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/></svg>',
 	map: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4z"/><path d="M8 2v16M16 6v16"/></svg>',
 	out: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+	scan: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 12h8"/></svg>',
 	shield: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>',
 };
 
@@ -122,6 +123,10 @@ const logoHtml = (flightNumber, airline, cls) => {
 };
 const CLASS_LABEL = {First: 'First Class', Business: 'Business Class', Economy: 'Economy Class'};
 const CLASS_ROWS = {First: [1, 2], Business: [3, 6], Economy: [7, 20]};
+// Add-ons (the server works out the real price): [code, label, rupees]
+const BAGGAGE = [['0', 'No extra baggage', 0], ['10', '+10 kg', 800], ['20', '+20 kg', 1500], ['30', '+30 kg', 2000]];
+const MEALS = [['', 'No meal', 0], ['veg', 'Vegetarian meal', 250], ['nonveg', 'Non-vegetarian meal', 300], ['snack', 'Snack box', 150]];
+const addOnText = (bag, meal) => [bag && bag !== '0' && bag !== 'null' ? 'Extra baggage +' + bag + ' kg' : '', (MEALS.find((m) => m[0] === meal && meal) || [])[1] || ''].filter(Boolean).join(' \u00b7 ');
 const seatSvg = (c) => '<svg class="fa-sv ' + c + '" viewBox="0 0 24 24" aria-hidden="true"><rect class="bk" x="4" y="2" width="16" height="13" rx="4"/><rect class="cs" x="2" y="17" width="20" height="5" rx="2.5"/><rect class="gl" x="7" y="4" width="10" height="3.5" rx="1.75"/></svg>';
 // Extra fee in rupees (the server works out the real price): first row of a class = legroom, A/F window, C/D aisle
 const seatFee = (id) => { const r = parseInt(id, 10), c = id.slice(-1); return [1, 3, 7].includes(r) ? 500 : 'AF'.includes(c) ? 300 : 'CD'.includes(c) ? 200 : 0; };
@@ -386,7 +391,7 @@ class FlightStatusApp extends HTMLElement {
 		const crumbs = (!adminMode && crumbLabel && !['home', 'login', 'register'].includes(current))
 			? '<nav class="fa-crumbs" aria-label="Breadcrumb"><a href="' + root + '/home">Home</a><span>&rsaquo;</span><b>' + esc(crumbLabel) + '</b></nav>' : '';
 
-		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users']];
+		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users'], ['gate', 'Gate scan', 'scan']];
 		const sidebar = sidebarMode ? '<aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
 			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '';
 		this.classList.toggle('has-sidebar', sidebarMode);
@@ -889,6 +894,9 @@ class FlightStatusApp extends HTMLElement {
 						esc(o && d ? o.code + ' → ' + d.code : '?'), esc(CLASS_LABEL[classOf(b.travelClass)]),
 						'<span class="fa-badge ' + (b.bookingStatus === 'CheckedIn' ? 'landed' : b.bookingStatus === 'Cancelled' ? 'delayed' : 'ontime') + '">' + esc(b.bookingStatus === 'CheckedIn' ? 'Checked in' : b.bookingStatus) + '</span>']];
 				}));
+		} else if (tab === 'gate') {
+			body = '<div class="fa-head"><h2>Gate scan</h2></div><div class="fa-gate"><div class="fa-gatebar"><input class="fa-gatecode" placeholder="Scan the QR, or paste the link or code from the boarding pass" autocomplete="off" /><button class="fa-btn block-auto fa-gatego" type="button">Check pass</button><button class="fa-chip fa-gatecam" type="button">Use camera</button></div>' +
+				'<video class="fa-gatevideo" hidden playsinline muted></video><div class="fa-gateresult"><p class="fa-panelnote">Scan a boarding pass QR with the camera, or paste its link, to see the passenger and mark them as boarded.</p></div></div>';
 		} else if (tab === 'reservations') {
 			// One list of who booked which flight: every booking, plus passes whose booking was deleted
 			const used = new Set(), pairs = [];
@@ -929,6 +937,7 @@ class FlightStatusApp extends HTMLElement {
 		const adminSearch = {flights: 'Search flight, airline, route or status', airports: 'Search airport code, name, city or country', gates: 'Search gate or terminal', bookings: 'Search PNR, passenger, flight or status'};
 		if (adminSearch[tab]) this.setupFilter(view, {key: 'admin-' + tab, items: '.fa-table tbody tr', placeholder: adminSearch[tab], table: true});
 		if (tab === 'reservations') this.bindReservations(view, reservations);
+		if (tab === 'gate') this.bindGate(view);
 		view.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => this.adminForm(view, b.dataset.add, null, {airports, flights, gates, bookings})));
 		view.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
 			const list = tab === 'flights' ? flights : tab === 'airports' ? airports : tab === 'bookings' ? bookings : gates;
@@ -944,6 +953,80 @@ class FlightStatusApp extends HTMLElement {
 				await this.renderAdmin(view, tab, {error: true, text: 'Could not delete: ' + e.message + (tab === 'airports' ? ' (an airport used by flights cannot be deleted)' : '')});
 			}
 		}));
+	}
+
+	// Gate scan: look up a boarding pass from its QR link and mark the passenger as boarded.
+	bindGate(view) {
+		const input = view.querySelector('.fa-gatecode'), out = view.querySelector('.fa-gateresult'), video = view.querySelector('.fa-gatevideo');
+		let stream = null;
+		const stopCamera = () => { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; video.hidden = true; };
+		const show = (p) => {
+			const at = (v) => esc(fmtDate(v) + ' ' + fmtTime(v));
+			const boarded = p.boardedAt ? '<div class="fa-gatestate ok">Boarded at ' + esc(fmtTime(p.boardedAt)) + '</div>' : '<div class="fa-gatestate">Not boarded yet</div>';
+			out.innerHTML = '<div class="fa-gatecard">' + boarded + '<h3>' + esc(p.passengerName) + '</h3><dl class="fa-kv">' +
+				[['Flight', p.flightNumber], ['Route', p.origin + ' \u2192 ' + p.destination], ['Departs', ''], ['Gate', p.gate], ['Seat', p.seat], ['Class', p.travelClass && p.travelClass !== 'null' ? p.travelClass : 'Economy'], ['PNR', p.pnr], ['Email', p.passengerEmail], ['Extras', addOnText(p.baggageKg, p.meal) || '-']]
+					.map((r) => '<div><dt>' + r[0] + '</dt><dd>' + (r[0] === 'Departs' ? at(p.departureTime) : esc(r[1])) + '</dd></div>').join('') + '</dl>' +
+				(p.boardedAt ? '' : '<button class="fa-btn block-auto fa-gateboard" type="button">Mark as boarded</button>') + '<div class="fa-error" hidden></div></div>';
+			const btn = out.querySelector('.fa-gateboard');
+			if (btn) btn.addEventListener('click', async () => {
+				btn.disabled = true;
+				try {
+					await this.gateCall('POST', '/gate/board', {code: input.value});
+					check();
+				} catch (x) {
+					const err = out.querySelector('.fa-error');
+					err.textContent = x.message;
+					err.hidden = false;
+					btn.disabled = false;
+				}
+			});
+		};
+		const check = async () => {
+			if (!input.value.trim()) return;
+			out.innerHTML = '<p class="fa-panelnote">Checking...</p>';
+			try {
+				show(await this.gateCall('GET', '/gate/lookup?code=' + encodeURIComponent(input.value.trim())));
+			} catch (x) {
+				out.innerHTML = '<div class="fa-gatecard"><div class="fa-gatestate bad">' + esc(x.message) + '</div></div>';
+			}
+		};
+		view.querySelector('.fa-gatego').addEventListener('click', check);
+		input.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
+		view.querySelector('.fa-gatecam').addEventListener('click', async () => {
+			if (stream) return stopCamera();
+			if (!window.isSecureContext || !navigator.mediaDevices) { out.innerHTML = '<p class="fa-panelnote">The camera works only on localhost or HTTPS. Paste the link from the pass instead.</p>'; return; }
+			try {
+				if (!window.jsQR) await new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'; sc.onload = ok; sc.onerror = () => no(new Error('Could not load the scanner')); document.head.appendChild(sc); });
+				stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}});
+				video.srcObject = stream;
+				video.hidden = false;
+				await video.play();
+				const canvas = document.createElement('canvas'), g = canvas.getContext('2d', {willReadFrequently: true});
+				const tick = () => {
+					if (!stream) return;
+					if (video.videoWidth) {
+						canvas.width = video.videoWidth;
+						canvas.height = video.videoHeight;
+						g.drawImage(video, 0, 0);
+						const hit = window.jsQR(g.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+						if (hit && hit.data) { input.value = hit.data; stopCamera(); check(); return; }
+					}
+					requestAnimationFrame(tick);
+				};
+				tick();
+			} catch (x) {
+				stopCamera();
+				out.innerHTML = '<p class="fa-panelnote">Could not start the camera: ' + esc(x.message) + '</p>';
+			}
+		});
+	}
+
+	async gateCall(method, path, body) {
+		const res = await getFetch()('/o/flight-boarding' + path, {method, credentials: 'include', headers: {'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
+		let data = {};
+		try { data = await res.json(); } catch (e) {}
+		if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+		return data;
 	}
 
 	bindReservations(view, rows) {
@@ -1626,7 +1709,7 @@ class FlightStatusApp extends HTMLElement {
 			`<div><span>Date</span><b>${esc(fmtDate(p.departureTime))}</b></div><div><span>Departs</span><b>${fmtTime(p.departureTime)}</b></div>` +
 			`<div><span>Boarding</span><b>${esc(boarding)}</b></div><div><span>Gate</span><b>${esc(p.gate)}</b></div>` +
 			`<div><span>Seat</span><b>${esc(p.seat)}${seatFee(p.seat) ? ' <small>(paid &#8377;' + seatFee(p.seat) + ')</small>' : ''}</b></div><div><span>PNR</span><b>${esc(p.pnr)}</b></div>` +
-			`<div><span>Class</span><b>${esc(p.travelClass && p.travelClass !== 'null' ? CLASS_LABEL[classOf(p.travelClass)] : 'Economy Class')}</b></div></div></div>` +
+			`<div><span>Class</span><b>${esc(p.travelClass && p.travelClass !== 'null' ? CLASS_LABEL[classOf(p.travelClass)] : 'Economy Class')}</b></div>${addOnText(p.baggageKg, p.meal) ? '<div><span>Extras</span><b>' + esc(addOnText(p.baggageKg, p.meal)) + '</b></div>' : ''}</div></div>` +
 			`<div class="fa-pass-qr">${qr}<span>${esc(p.pnr)}</span></div></div></div>`;
 	}
 
@@ -1640,7 +1723,8 @@ class FlightStatusApp extends HTMLElement {
 		const api = '/o/flight-boarding', site = SITE_ID();
 		const [flights, ap] = await Promise.all([this.flights(), this.airports(), this.loadQr().catch(() => {})]);
 		this._airlines = Object.fromEntries(flights.map((f) => [f.flightNumber, f.airline]));
-		let tab = 'new', seat = '', taken = [];
+		let tab = 'new', seat = '', taken = [], bag = '0', meal = '';
+		const addOnFees = () => (BAGGAGE.find((x) => x[0] === bag) || [0, 0, 0])[2] + (MEALS.find((x) => x[0] === meal) || [0, 0, 0])[2];
 
 		const call = async (method, path, body) => {
 			const res = await getFetch()(api + path, {method, credentials: 'include', headers: {'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
@@ -1651,7 +1735,7 @@ class FlightStatusApp extends HTMLElement {
 		};
 		// Paid seat: server makes a Stripe Checkout page, we go there, Stripe sends the user back with a session_id, and the server checks it at /pass
 		const payForSeat = async (b, lastName) => {
-			const order = await call('POST', '/payment/order', {siteId: site, pnr: b.pnr, lastName, seat, returnUrl: location.origin + location.pathname});
+			const order = await call('POST', '/payment/order', {siteId: site, pnr: b.pnr, lastName, seat, bag, meal, returnUrl: location.origin + location.pathname});
 			location.href = order.url;
 			return new Promise(() => {});
 		};
@@ -1717,6 +1801,8 @@ class FlightStatusApp extends HTMLElement {
 					kv('Route', f ? esc((o.code || '?') + ' \u2192 ' + (d.code || '?')) : '-') + kv('Departs', f ? esc(fmtDate(f.departureTime) + ' \u00b7 ' + fmtTime(f.departureTime)) : '-') + kv('Class', esc(CLASS_LABEL[classOf(b.travelClass)])) + kv('PNR', esc(b.pnr)) + '</dl>' +
 					'<h4>Seats</h4><div class="fa-key">' + [['', 'Available'], ['paid', 'Paid seat'], ['leg', 'Extra legroom'], ['taken', 'Occupied'], ['mine', 'Your seat']].map((k) => '<span>' + seatSvg(k[0]) + k[1] + '</span>').join('') + '</div>' +
 					'<h4>Seat prices</h4><table class="fa-fees"><tr><td>Extra legroom (first row of a class)</td><td>&#8377;500</td></tr><tr><td>Window seat</td><td>&#8377;300</td></tr><tr><td>Aisle seat</td><td>&#8377;200</td></tr><tr><td>Middle seat</td><td>Free</td></tr></table>' +
+					'<h4>Add-ons</h4><div class="fa-addons"><label>Extra baggage<select name="bag">' + BAGGAGE.map((x) => '<option value="' + x[0] + '">' + x[1] + (x[2] ? ' &middot; &#8377;' + x[2] : '') + '</option>').join('') + '</select></label>' +
+					'<label>Meal<select name="meal">' + MEALS.map((x) => '<option value="' + x[0] + '">' + x[1] + (x[2] ? ' &middot; &#8377;' + x[2] : '') + '</option>').join('') + '</select></label></div>' +
 					'<div class="fa-summary"></div><div class="fa-error" hidden></div><button class="fa-btn" type="submit">Check in and get boarding pass</button></div>' +
 					'<div class="fa-ckcard fa-cabin"><h3>' + esc(b.flightNumber) + ' &middot; Cabin</h3><div class="fa-seats"></div></div></form>';
 			const form = step.querySelector('form'), err = form.querySelector('.fa-error'), grid = form.querySelector('.fa-seats');
@@ -1737,8 +1823,10 @@ class FlightStatusApp extends HTMLElement {
 				grid.innerHTML = html;
 				grid.scrollTop = keep;
 				const fee = seat ? seatFee(seat) : 0, r = parseInt(seat, 10), kind = [1, 3, 7].includes(r) ? 'Extra legroom' : 'AF'.includes(seat.slice(-1)) ? 'Window' : 'CD'.includes(seat.slice(-1)) ? 'Aisle' : 'Middle';
-					form.querySelector('.fa-summary').innerHTML = seat ? '<span>Your seat</span><b>' + seat + '</b><small>' + kind + '</small><em>' + (fee ? 'Extra &#8377;' + fee : 'Free') + '</em>' : '<span>Pick a seat on the plane</span>';
-					form.querySelector('button[type=submit]').textContent = fee ? 'Pay \u20b9' + fee + ' and check in' : 'Check in and get boarding pass';
+					const add = addOnFees(), total = fee + add;
+					form.querySelector('.fa-summary').innerHTML = (seat ? '<span>Your seat</span><b>' + seat + '</b><small>' + kind + '</small><em>' + (fee ? 'Extra &#8377;' + fee : 'Free') + '</em>' : '<span>Pick a seat on the plane</span>') +
+						(add ? '<div class="fa-sumadd"><small>' + esc(addOnText(bag, meal)) + ' &middot; &#8377;' + add + '</small></div>' : '') + (total ? '<div class="fa-sumadd total">Total <b>&#8377;' + total + '</b></div>' : '');
+					form.querySelector('button[type=submit]').textContent = total ? 'Pay \u20b9' + total + ' and check in' : 'Check in and get boarding pass';
 				grid.querySelectorAll('.fa-seat:not(.taken):not(.other)').forEach((btn) => btn.addEventListener('click', () => { seat = btn.dataset.s; drawSeats(); }));
 			};
 			const loadSeats = async () => {
@@ -1751,7 +1839,18 @@ class FlightStatusApp extends HTMLElement {
 			loadSeats();
 			// Back from Stripe: pick the paid seat again and finish the check-in
 			let sessionId = new URLSearchParams(location.search).get('session_id');
-			if (sessionId) { seat = new URLSearchParams(location.search).get('seat') || ''; history.replaceState(null, '', location.pathname); setTimeout(() => form.requestSubmit(), 400); }
+			form.bag.addEventListener('change', () => { bag = form.bag.value; drawSeats(); });
+			form.meal.addEventListener('change', () => { meal = form.meal.value; drawSeats(); });
+			if (sessionId) {
+				const back = new URLSearchParams(location.search);
+				seat = back.get('seat') || '';
+				bag = back.get('bag') || '0';
+				meal = back.get('meal') || '';
+				form.bag.value = bag;
+				form.meal.value = meal;
+				history.replaceState(null, '', location.pathname);
+				setTimeout(() => form.requestSubmit(), 400);
+			}
 
 			form.addEventListener('submit', async (e) => {
 				e.preventDefault();
@@ -1760,8 +1859,8 @@ class FlightStatusApp extends HTMLElement {
 				const btn = form.querySelector('button[type=submit]');
 				btn.disabled = true;
 				try {
-					const pay = sessionId ? {sessionId} : seatFee(seat) ? await payForSeat(b, lastName) : {};
-					const pass = await call('POST', '/pass', {siteId: site, pnr: b.pnr, lastName, seat, ...pay});
+					const pay = sessionId ? {sessionId} : (seatFee(seat) + addOnFees()) ? await payForSeat(b, lastName) : {};
+					const pass = await call('POST', '/pass', {siteId: site, pnr: b.pnr, lastName, seat, bag, meal, ...pay});
 					step.innerHTML = '';
 					showPass(box.querySelector('.fa-bpresult'), pass);
 				} catch (x) {
