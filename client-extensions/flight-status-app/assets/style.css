@@ -752,3 +752,94 @@ flight-status-app .fa-cabin .fa-seatzone { margin: .8rem .4rem .4rem; padding: .
 	flight-status-app .fa-cabin .fa-seatrow span { width: 1.4rem; font-size: .75rem; margin-right: 0; }
 	flight-status-app .fa-cabin .fa-seatrow, flight-status-app .fa-cabin .fa-seathead { gap: .2rem; }
 }
+
+/* Search box above lists */
+flight-status-app [hidden] { display: none !important; }
+flight-status-app .fa-filterbar { display: flex; align-items: center; gap: .75rem; margin: 1rem 0; }
+flight-status-app .fa-filter { flex: 1; max-width: 520px; padding: .7rem 1rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: .95rem; background: #fff; }
+flight-status-app .fa-filter:focus-visible { outline: 3px solid rgba(17, 70, 214, .25); border-color: #1146d6; }
+flight-status-app .fa-filtercount { color: #6b7790; font-size: .85rem; }
+
+/* Admin: sidebar and dashboard */
+flight-status-app .fa-adminshell { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 1.5rem; max-width: 1440px; margin: 0 auto; padding: 1.25rem 1.5rem 0; align-items: start; }
+flight-status-app .fa-adminshell .fa-view { max-width: none; margin: 0; padding: 0; min-width: 0; }
+flight-status-app .fa-sidebar { position: sticky; top: 1rem; background: #fff; border: 1px solid var(--fa-line); border-radius: 14px; padding: .75rem; box-shadow: 0 4px 14px rgba(15, 30, 80, .06); }
+flight-status-app .fa-sidebar nav { display: grid; gap: .2rem; }
+flight-status-app .fa-sidebar a { display: flex; align-items: center; gap: .7rem; padding: .7rem .85rem; border-radius: 10px; color: #44506e; font-weight: 600; text-decoration: none; }
+flight-status-app .fa-sidebar a:hover { background: #eef3ff; color: #0f1e50; }
+flight-status-app .fa-sidebar a.active { background: #1146d6; color: #fff; }
+flight-status-app .fa-sidebar .fa-sideout { margin-top: .6rem; border-top: 1px solid #e3e9f6; border-radius: 0 0 10px 10px; padding-top: 1rem; color: #1146d6; }
+flight-status-app .fa-dashtiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: .75rem; margin: 1rem 0 1.25rem; }
+flight-status-app .fa-dashtiles .fa-stat { padding: .9rem; }
+flight-status-app .fa-dashgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+flight-status-app .fa-dashcard { background: #fff; border: 1px solid var(--fa-line); border-radius: 14px; padding: 1.1rem 1.25rem; box-shadow: 0 4px 14px rgba(15, 30, 80, .06); }
+flight-status-app .fa-dashcard h3 { margin: 0 0 .8rem; font-size: 1rem; color: #0f1e50; }
+flight-status-app .fa-dashcard h4 { margin: .9rem 0 .4rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7790; }
+flight-status-app .fa-donutwrap { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+flight-status-app .fa-donut { width: 150px; height: 150px; border-radius: 50%; display: grid; place-items: center; position: relative; flex: none; }
+flight-status-app .fa-donut::before { content: ""; position: absolute; inset: 22px; background: #fff; border-radius: 50%; }
+flight-status-app .fa-donut span { position: relative; font-size: 1.8rem; font-weight: 700; color: #0f1e50; display: grid; text-align: center; line-height: 1; }
+flight-status-app .fa-donut small { font-size: .7rem; font-weight: 500; color: #6b7790; margin-top: .2rem; }
+flight-status-app .fa-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+flight-status-app .fa-legend li { display: flex; align-items: center; gap: .5rem; color: #44506e; }
+flight-status-app .fa-legend i { width: .8rem; height: .8rem; border-radius: 3px; }
+flight-status-app .fa-legend b { margin-left: auto; padding-left: 1rem; color: #0f1e50; }
+flight-status-app .fa-dbars { display: flex; align-items: flex-end; gap: .6rem; height: 170px; }
+flight-status-app .fa-dbar { flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .25rem; min-width: 0; }
+flight-status-app .fa-dbar i { width: 100%; max-width: 38px; background: linear-gradient(#3b78ff, #1146d6); border-radius: 6px 6px 0 0; }
+flight-status-app .fa-dbar b { font-size: .8rem; color: #0f1e50; }
+flight-status-app .fa-dbar span { font-size: .68rem; color: #6b7790; text-align: center; white-space: nowrap; }
+flight-status-app .fa-late em.muted { color: #6b7790; }
+flight-status-app .fa-event { display: flex; gap: .7rem; padding: .5rem 0; border-bottom: 1px solid #eef1f8; color: #44506e; font-size: .9rem; }
+flight-status-app .fa-event:last-child { border-bottom: 0; }
+flight-status-app .fa-event small { display: block; color: #8a94a8; font-size: .75rem; }
+@media (max-width: 1100px) { flight-status-app .fa-dashtiles { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 860px) {
+	flight-status-app .fa-adminshell { grid-template-columns: 1fr; padding: .75rem; }
+	flight-status-app .fa-sidebar { position: static; padding: .4rem; }
+	flight-status-app .fa-sidebar nav { display: flex; overflow-x: auto; gap: .3rem; }
+	flight-status-app .fa-sidebar a { white-space: nowrap; padding: .55rem .75rem; }
+	flight-status-app .fa-sidebar .fa-sideout { margin: 0; border: 0; }
+	flight-status-app .fa-dashgrid { grid-template-columns: 1fr; }
+	flight-status-app .fa-dashtiles { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 860px) {
+	flight-status-app .fa-adminshell { grid-template-columns: minmax(0, 1fr); }
+	flight-status-app .fa-adminshell > * { min-width: 0; max-width: 100%; }
+	flight-status-app .fa-adminbtns { flex-wrap: wrap; }
+	flight-status-app .fa-dashtiles, flight-status-app .fa-dashgrid { grid-template-columns: minmax(0, 1fr); }
+	flight-status-app .fa-dashtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Admin step 2: full width, compact sortable tables, icon buttons, paging, confirm box */
+flight-status-app.has-sidebar .fa-nav { max-width: none; padding-left: 1.5rem; padding-right: 1.5rem; }
+flight-status-app .fa-adminshell { max-width: none; padding: 1.25rem 1.5rem 0; grid-template-columns: 230px minmax(0, 1fr); }
+flight-status-app .fa-adminshell .fa-table th { padding: .65rem .9rem; }
+flight-status-app .fa-adminshell .fa-table td { padding: .5rem .9rem; font-size: .92rem; }
+flight-status-app .fa-adminshell .fa-table tbody tr:hover { background: #f5f8ff; }
+flight-status-app .fa-table th.sortable { cursor: pointer; user-select: none; }
+flight-status-app .fa-table th.sortable:hover { color: #1146d6; }
+flight-status-app .fa-table th.asc::after { content: " \25B2"; font-size: .65rem; }
+flight-status-app .fa-table th.desc::after { content: " \25BC"; font-size: .65rem; }
+flight-status-app .fa-iconbtn { width: 2rem; height: 2rem; display: inline-grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #1146d6; cursor: pointer; }
+flight-status-app .fa-iconbtn:hover { background: #eef3ff; border-color: #cfdcff; }
+flight-status-app .fa-iconbtn.danger { color: #d64545; }
+flight-status-app .fa-iconbtn.danger:hover { background: #fdecec; border-color: #f5c2c2; }
+flight-status-app .fa-chipstrip { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 1rem; }
+flight-status-app .fa-pager { margin-left: auto; display: inline-flex; align-items: center; gap: .4rem; color: #6b7790; font-size: .85rem; white-space: nowrap; }
+flight-status-app .fa-pager select { padding: .3rem .4rem; border: 1px solid var(--fa-line); border-radius: 8px; background: #fff; }
+flight-status-app .fa-pager button { width: 1.9rem; height: 1.9rem; border: 1px solid var(--fa-line); border-radius: 8px; background: #fff; cursor: pointer; font-size: 1.1rem; line-height: 1; }
+flight-status-app .fa-pager button:disabled { opacity: .4; cursor: default; }
+flight-status-app .fa-confirm { position: fixed; inset: 0; z-index: 2000; background: rgba(8, 18, 50, .55); display: grid; place-items: center; padding: 1rem; }
+flight-status-app .fa-confirmbox { background: #fff; border-radius: 14px; padding: 1.5rem; width: min(420px, 100%); box-shadow: 0 20px 50px rgba(8, 18, 50, .35); }
+flight-status-app .fa-confirmbox h3 { margin: 0 0 .5rem; color: #0f1e50; }
+flight-status-app .fa-confirmbox p { margin: 0 0 1.25rem; color: #44506e; }
+flight-status-app .fa-confirmbtns { display: flex; justify-content: flex-end; gap: .6rem; }
+flight-status-app .fa-btn.danger { background: #d64545; box-shadow: none; color: #fff; }
+@media (max-width: 860px) { flight-status-app .fa-adminshell { grid-template-columns: minmax(0, 1fr); padding: .75rem; } flight-status-app .fa-pager { margin-left: 0; } }
+/* Admin: keep the content below the fixed header (it was hidden behind it) */
+flight-status-app .fa-adminshell { padding-top: 6rem; }
+flight-status-app .fa-sidebar { top: calc(var(--fa-top, 0px) + 5.25rem); }
+@media (max-width: 860px) { flight-status-app .fa-adminshell { padding-top: 5.5rem; } }
+/* Admin: keep the last rows above the fixed footer */
+flight-status-app .fa-adminshell { padding-bottom: 5rem; }
