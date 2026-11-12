@@ -175,6 +175,13 @@ public class LiveApplication extends Application {
                 flight.put("showstatus", _text(v.get("showstatus")).replaceAll("([a-z])([A-Z])", "$1 $2"));
                 flight.put("departureTime", _time(v.get("departureTime")));
                 flight.put("arrivalTime", _time(v.get("arrivalTime")));
+                flight.put("scheduledDeparture", _time(v.get("scheduledDeparture")));
+                flight.put("scheduledArrival", _time(v.get("scheduledArrival")));
+                flight.put("depTerminal", _text(v.get("depTerminal")));
+                flight.put("arrTerminal", _text(v.get("arrTerminal")));
+                flight.put("depGate", _text(v.get("depGate")));
+                flight.put("arrGate", _text(v.get("arrGate")));
+                flight.put("source", _text(v.get("source")));
                 flight.put("delayMinutes", _number(v.get("delayMinutes")));
                 flight.put("originAirportId", _number(v.get("r_originAirport_c_airportId")));
                 flight.put("destinationAirportId", _number(v.get("r_destinationAirport_c_airportId")));

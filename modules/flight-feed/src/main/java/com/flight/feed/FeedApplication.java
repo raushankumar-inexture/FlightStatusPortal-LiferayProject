@@ -477,6 +477,22 @@ public class FeedApplication extends Application {
 		values.put("r_originAirport_c_airportId", airports.get(dep.getString("iata")));
 		values.put("r_destinationAirport_c_airportId", airports.get(arr.getString("iata")));
 
+		// Scheduled times, terminals and gates, shown next to the expected times on the Flight Status page.
+		Date schedDep = _time(dep, "scheduled"), schedArr = _time(arr, "scheduled");
+
+		if (schedDep != null) {
+			values.put("scheduledDeparture", schedDep);
+		}
+
+		if (schedArr != null) {
+			values.put("scheduledArrival", schedArr);
+		}
+
+		values.put("depTerminal", dep.getString("terminal"));
+		values.put("depGate", dep.getString("gate"));
+		values.put("arrTerminal", arr.getString("terminal"));
+		values.put("arrGate", arr.getString("gate"));
+
 		if (arrTime != null) {
 			values.put("arrivalTime", arrTime);
 			values.put("flightDurationMinutes", (int)Math.max(0, (arrTime.getTime() - depTime.getTime()) / 60000));
