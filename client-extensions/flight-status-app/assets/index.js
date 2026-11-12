@@ -4,14 +4,14 @@ const SITE_ID = () => Liferay.ThemeDisplay.getScopeGroupId();
 
 const ROUTES = [
 	{path: 'home', slug: 'home', label: 'Home'},
-	{path: 'flights', slug: 'flight-status', label: 'Flight Status'},
-	{path: 'search', slug: 'search', label: 'Search'},
-	{path: 'airports', slug: 'airports', label: 'Airports'},
-	{path: 'gates', slug: 'gates', label: 'Gates'},
+	{path: 'flights', slug: 'flight-status', group: 'Flights', label: 'Flight Status'},
+	{path: 'search', slug: 'search', group: 'Flights', label: 'Search'},
+	{path: 'airports', slug: 'airports', group: 'Airports', label: 'Airports'},
+	{path: 'gates', slug: 'gates', group: 'Airports', label: 'Gates'},
 	{path: 'live', slug: 'live-map', label: 'Live Map'},
-	{path: 'board', slug: 'airport-board', label: 'Airport Board'},
+	{path: 'board', slug: 'airport-board', group: 'Flights', label: 'Airport Board'},
 	{path: 'boarding', slug: 'boarding-pass', label: 'Boarding Pass', auth: true, menu: true},
-	{path: 'ontime', slug: 'on-time-performance', label: 'On-time'},
+	{path: 'ontime', slug: 'on-time-performance', group: 'Flights', label: 'On-time'},
 	{path: 'alerts', slug: 'my-alerts', label: 'My Alerts', auth: true, menu: true},
 	{path: 'login', slug: 'login', label: 'Login', hidden: true},
 	{path: 'register', slug: 'register', label: 'Register', hidden: true},
@@ -392,17 +392,13 @@ class FlightStatusApp extends HTMLElement {
 				.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${current === 'admin' && tab === t[0] ? 'active' : ''}">${t[1]}</a>`).join('') +
 				`<a href="${root}/live-map" class="${current === 'live' ? 'active' : ''}">Live Map</a>` +
 				`<a class="fa-auth" href="${root}/home?viewsite=1">View site</a>`
-			: ROUTES.filter(showRoute).map((r) => `<a href="${root}/${r.slug}" class="${r.path === current ? 'active' : ''}">${r.label}</a>`).join('') +
-				(admin ? `<a class="fa-auth" href="${root}/admin">Admin</a>` : '');
-		const footerLinks = adminMode
-			? '<span>Admin Portal</span>'
-			: ROUTES.filter(showRoute).map((r) => `<a href="${root}/${r.slug}">${r.label}</a>`).join('') + '<span class="fa-sep">&middot;</span><span>Live flight information</span><span class="fa-sep">&middot;</span><span>Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons</span>';
+			: this.navLinks(root, current) + (admin ? `<a class="fa-auth" href="${root}/admin">Admin</a>` : '');
 
 		const crumbLabel = (ROUTES.find((r) => r.path === current) || {}).label;
 		const crumbs = (!adminMode && crumbLabel && !['home', 'login', 'register'].includes(current))
 			? '<nav class="fa-crumbs" aria-label="Breadcrumb"><a href="' + root + '/home">Home</a><span>&rsaquo;</span><b>' + esc(crumbLabel) + '</b></nav>' : '';
 
-		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users'], ['gate', 'Gate scan', 'scan'], ['track', 'Track flight', 'search']];
+		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users'], ['gate', 'Gate scan', 'scan'], ['track', 'Track flight', 'search'], ['assistance', 'Assistance', 'users'], ['notices', 'Notices', 'bell'], ['guides', 'Airport guide', 'map'], ['helpoptions', 'Help options', 'shield']];
 		const sidebar = sidebarMode ? '<aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
 			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '';
 		this.classList.toggle('has-sidebar', sidebarMode);
@@ -410,11 +406,14 @@ class FlightStatusApp extends HTMLElement {
 			'<header class="fa-header"><div class="fa-nav"><a class="fa-brand" href="' + root + (adminMode ? '/admin' : '/home') + '"><span class="fa-logo">' + ICONS.plane + '</span>Flight Status <b>' + (adminMode ? 'Admin' : 'Portal') + '</b></a>' +
 			'<button class="fa-burger" type="button" aria-label="Menu">&#9776;</button>' +
 			'<nav class="fa-links">' + links + this.authLinks(root, current) + '</nav></div></header>' +
-			crumbs +
+			crumbs + (sidebarMode ? '' : '<div class="fa-alerts' + (crumbs ? '' : ' first') + '" hidden></div>') +
 			(sidebarMode ? '<div class="fa-adminshell">' + sidebar + '<main class="fa-view"><div class="fa-skel"><i></i><i></i><i></i></div></main></div>' : '<main class="fa-view"><div class="fa-skel"><i></i><i></i><i></i></div></main>') +
-			'<footer class="fa-footer"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span class="fa-sep">&middot;</span>' + footerLinks +
-			'<span class="fa-sep">&middot;</span><button type="button" class="fa-legal" data-legal="privacy">Privacy</button><button type="button" class="fa-legal" data-legal="terms">Terms</button><button type="button" class="fa-legal" data-legal="cookies">Cookies</button></footer>';
+			(adminMode
+				? '<footer class="fa-footer"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span class="fa-sep">&middot;</span><span>Admin Portal</span><span class="fa-sep">&middot;</span>' + this.legalLinks() + '</footer>'
+				: this.footerHtml(root));
+		this.classList.toggle('has-bigfooter', !adminMode);
 		this.classList.toggle('has-crumbs', !!crumbs);
+		this.loadNotices();
 
 		this.querySelector('.fa-burger').addEventListener('click', () => this.querySelector('.fa-links').classList.toggle('open'));
 		this.bindShell();
@@ -544,7 +543,46 @@ class FlightStatusApp extends HTMLElement {
 		setTimeout(() => t.remove(), 8000);
 	}
 
+	// The menu: pages with a group (see ROUTES) share one drop-down; the others are plain links.
+	navLinks(root, current) {
+		const routes = ROUTES.filter(showRoute);
+		const link = (r) => `<a href="${root}/${r.slug}" class="${r.path === current ? 'active' : ''}">${r.label}</a>`;
+		const shown = new Set();
+		return routes.map((r) => {
+			if (!r.group) return link(r);
+			if (shown.has(r.group)) return '';
+			shown.add(r.group);
+			const members = routes.filter((x) => x.group === r.group);
+			return `<div class="fa-drop ${members.some((m) => m.path === current) ? 'active' : ''}"><button type="button" class="fa-dropbtn" aria-haspopup="true">${esc(r.group)} <span>&#9662;</span></button><div class="fa-dropmenu">${members.map(link).join('')}</div></div>`;
+		}).join('');
+	}
+
+	legalLinks() {
+		return ['privacy', 'terms', 'cookies'].map((k) => `<button type="button" class="fa-legal" data-legal="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('');
+	}
+
+	// The page footer: one column for each menu group, one for the signed-in user's pages, one for the legal links.
+	footerHtml(root) {
+		const col = (title, items) => items.length ? `<div class="fa-footcol"><h4>${esc(title)}</h4>${items.join('')}</div>` : '';
+		const link = (r) => `<a href="${root}/${r.slug}">${r.label}</a>`;
+		const routes = ROUTES.filter(showRoute);
+		const groups = [...new Set(routes.filter((r) => r.group).map((r) => r.group))];
+		const mine = ROUTES.filter((r) => r.menu && (!r.auth || Liferay.ThemeDisplay.isSignedIn()));
+		return '<footer class="fa-footer fa-footbig"><div class="fa-footcols">' +
+			`<div class="fa-footbrand"><a class="fa-brand" href="${root}/home"><span class="fa-logo">${ICONS.plane}</span>Flight Status <b>Portal</b></a><p>Live flight information for every airport we cover.</p></div>` +
+			col('Explore', routes.filter((r) => !r.group).map(link)) + groups.map((g) => col(g, routes.filter((r) => r.group === g).map(link))).join('') +
+			col('My account', mine.map(link)) + col('Legal', this.legalLinks().split('</button>').filter(Boolean).map((b) => b + '</button>')) +
+			'</div><div class="fa-footbar"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span>Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons</span></div></footer>';
+	}
+
 	bindShell() {
+		this.querySelectorAll('.fa-dropbtn').forEach((b) => b.addEventListener('click', (e) => {
+			e.stopPropagation();
+			const open = b.parentElement.classList.contains('open');
+			this.querySelectorAll('.fa-drop.open').forEach((d) => d.classList.remove('open'));
+			b.parentElement.classList.toggle('open', !open);
+		}));
+		document.addEventListener('click', () => this.querySelectorAll('.fa-drop.open').forEach((d) => d.classList.remove('open')));
 		const btn = this.querySelector('.fa-userbtn'), list = this.querySelector('.fa-usermenu-list');
 		if (btn && list) {
 			const close = () => { list.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
@@ -828,6 +866,26 @@ class FlightStatusApp extends HTMLElement {
 				fields: [{k: 'gateNumber', l: 'Gate number (e.g. A1)', req: true}, {k: 'terminal', l: 'Terminal (e.g. T1)', req: true}],
 				cols: [['gateNumber', 'Gate'], ['terminal', 'Terminal']],
 			},
+			notices: {
+				label: 'Notice', plural: 'Notices', list: '/o/c/notices/scopes/' + site + '?pageSize=200', create: '/o/c/notices/scopes/' + site, item: '/o/c/notices/',
+				fields: [{k: 'message', l: 'Message shown at the top of the pages', req: true}, {k: 'level', l: 'Type', type: 'select', options: [['info', 'Information'], ['warning', 'Warning'], ['alert', 'Urgent']]}, {k: 'active', l: 'Show it now', type: 'checkbox'}],
+				cols: [['message', 'Message'], ['level', 'Type'], ['active', 'Shown']],
+			},
+			guides: {
+				label: 'Guide entry', plural: 'Airport guide', list: '/o/c/airportguides/scopes/' + site + '?pageSize=200', create: '/o/c/airportguides/scopes/' + site, item: '/o/c/airportguides/',
+				fields: [{k: 'airportCode', l: 'Airport', type: 'airport', req: true}, {k: 'category', l: 'Category (for example Taxi, Metro, Bus, Parking)', type: 'suggest', req: true}, {k: 'title', l: 'Title', req: true}, {k: 'details', l: 'Details (fares, timings, where to find it)', type: 'textarea'}, {k: 'link', l: 'Link (optional)'}, {k: 'imageUrl', l: 'Photo link (optional, a city photo is used when empty)'}],
+				cols: [['airportCode', 'Airport'], ['category', 'Category'], ['title', 'Title'], ['details', 'Details']],
+			},
+			assistance: {
+				label: 'Request', plural: 'Assistance requests', list: '/o/c/assistancerequests/scopes/' + site + '?pageSize=200&sort=dateCreated:desc', create: '/o/c/assistancerequests/scopes/' + site, item: '/o/c/assistancerequests/', noAdd: true,
+				fields: [{k: 'requestStatus', l: 'Status', type: 'select', options: [['Open', 'Open'], ['Done', 'Done']]}],
+				cols: [['pnr', 'PNR'], ['passengerName', 'Passenger'], ['flightNumber', 'Flight'], ['assistanceType', 'Help needed'], ['note', 'Note'], ['requestStatus', 'Status']],
+			},
+			helpoptions: {
+				label: 'Help option', plural: 'Help options', list: '/o/c/assistanceoptions/scopes/' + site + '?pageSize=200', create: '/o/c/assistanceoptions/scopes/' + site, item: '/o/c/assistanceoptions/',
+				fields: [{k: 'name', l: 'Kind of help passengers can ask for', req: true}],
+				cols: [['name', 'Help option']],
+			},
 			bookings: {
 				label: 'Booking', plural: 'Bookings', list: '/o/c/bookings/scopes/' + site + '?pageSize=200', create: '/o/c/bookings/scopes/' + site, item: '/o/c/bookings/',
 			},
@@ -935,9 +993,11 @@ class FlightStatusApp extends HTMLElement {
 				'<input class="fa-resdate" type="date" title="Departure date" /><button class="fa-chip fa-resclear" type="button">Clear</button><span class="fa-rescount"></span></div>' +
 				'<div class="fa-tablewrap"><table class="fa-table"><thead><tr>' + heads.map((h) => '<th data-s="' + h[1] + '" class="fa-sortable">' + h[0] + '</th>').join('') + '</tr></thead><tbody></tbody></table></div><div class="fa-msg fa-resempty" hidden>No reservations match.</div>';
 		} else {
-			const E = ENT[tab], items = tab === 'airports' ? airports : gates;
-			body = '<div class="fa-head"><h2>' + E.plural + '</h2><button class="fa-btn block-auto" data-add="' + tab + '">+ Add ' + E.label + '</button></div>' +
-				this.adminTable(E.cols.map((c) => c[1]), items.map((it) => [it.id, E.cols.map((c) => esc(it[c[0]]))]));
+			const E = ENT[tab], items = tab === 'airports' ? airports : tab === 'gates' ? gates : (await this.json(E.list)).items;
+			this._adminItems = items;
+			const show = (v) => (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : esc(v));
+			body = '<div class="fa-head"><h2>' + E.plural + '</h2>' + (E.noAdd ? '' : '<button class="fa-btn block-auto" data-add="' + tab + '">+ Add ' + E.label + '</button>') + '</div>' +
+				this.adminTable(E.cols.map((c) => c[1]), items.map((it) => [it.id, E.cols.map((c) => show(it[c[0]]))]));
 		}
 
 		const count = (list, pick) => { const m = {}; list.forEach((x) => { const k = pick(x); if (k) m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((x, y) => y[1] - x[1]); };
@@ -958,10 +1018,10 @@ class FlightStatusApp extends HTMLElement {
 			fetch('/o/flight-feed/status', {credentials: 'include'}).then((r) => r.json()).then((st) => { view.querySelector('.fa-trackquota').textContent = st.enabled ? 'Flight data lookups used this month: ' + st.callsThisMonth + ' of ' + st.monthlyLimit + ' (shared with the daily sync). Live aircraft tracking has no limit.' : 'The flight data service is not connected. Live aircraft tracking still works.'; }).catch(() => {});
 		}
 		if (tab === 'dashboard') this.bindFeed(view);
-		view.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => this.adminForm(view, b.dataset.add, null, {airports, flights, gates, bookings})));
+		view.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => this.adminForm(view, b.dataset.add, null, {airports, flights, gates, bookings, items: this._adminItems || []})));
 		view.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
-			const list = tab === 'flights' ? flights : tab === 'airports' ? airports : tab === 'bookings' ? bookings : gates;
-			this.adminForm(view, tab, list.find((x) => String(x.id) === b.dataset.edit), {airports, flights, gates, bookings});
+			const list = {flights, airports, bookings, gates}[tab] || this._adminItems;
+			this.adminForm(view, tab, list.find((x) => String(x.id) === b.dataset.edit), {airports, flights, gates, bookings, items: this._adminItems || []});
 		}));
 		view.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
 			if (!(await this.confirmBox('Delete this ' + ENT[tab].label.toLowerCase() + '? This cannot be undone.'))) return;
@@ -1179,6 +1239,19 @@ class FlightStatusApp extends HTMLElement {
 			'</tbody></table></div>';
 	}
 
+	// One field of the simple add/edit form: text (default), textarea, select, checkbox, airport (an airport code) or suggest (text with ideas from what was typed before).
+	fieldHtml(f, item, data) {
+		const value = item ? item[f.k] : '';
+		const label = (input) => `<label>${f.l}${input}</label>`;
+		if (f.type === 'checkbox') return `<label class="fa-check"><input name="${f.k}" type="checkbox" ${(item ? item[f.k] : true) ? 'checked' : ''} /> ${f.l}</label>`;
+		if (f.type === 'textarea') return label(`<textarea name="${f.k}" rows="4" ${f.req ? 'required' : ''}>${esc(value)}</textarea>`);
+		const options = f.type === 'airport' ? data.airports.map((a) => [a.code, a.code + ' \u2013 ' + a.city]) : f.options;
+		if (options) return label(`<select name="${f.k}" ${f.req ? 'required' : ''}>${options.map((o) => `<option value="${esc(o[0])}" ${String(o[0]) === String(value) ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select>`);
+		const list = f.type === 'suggest' ? `list="fa-list-${f.k}"` : '';
+		const ideas = f.type === 'suggest' ? `<datalist id="fa-list-${f.k}">${[...new Set((data.items || []).map((x) => x[f.k]).filter(Boolean))].map((v) => `<option value="${esc(v)}"></option>`).join('')}</datalist>` : '';
+		return label(`<input name="${f.k}" ${list} ${f.req ? 'required' : ''} value="${esc(value)}" />${ideas}`);
+	}
+
 	adminForm(view, kind, item, data) {
 		const ENT = this.adminEntities(), E = ENT[kind];
 		const toLocal = (v) => {
@@ -1217,7 +1290,7 @@ class FlightStatusApp extends HTMLElement {
 				`<div class="fa-two"><label>Class<select name="travelClass">${opt(Object.entries(CLASS_LABEL), classOf(item && item.travelClass))}</select></label>` +
 				`<label>Status<select name="bookingStatus">${opt([['Booked', 'Booked'], ['CheckedIn', 'Checked in'], ['Cancelled', 'Cancelled']], item ? item.bookingStatus : 'Booked')}</select></label></div>`;
 		} else {
-			fields = E.fields.map((f) => `<label>${f.l}<input name="${f.k}" ${f.req ? 'required' : ''} value="${esc(item ? item[f.k] : '')}" /></label>`).join('');
+			fields = E.fields.map((f) => this.fieldHtml(f, item, data)).join('');
 		}
 		const modal = document.createElement('div');
 		modal.className = 'fa-modal';
@@ -1303,7 +1376,7 @@ class FlightStatusApp extends HTMLElement {
 				if (data.bookings.some((b) => b.pnr.toUpperCase() === pnrValue && (!item || b.id !== item.id))) { err.textContent = 'This booking code already exists.'; err.hidden = false; return; }
 				payload = {pnr: pnrValue, flightNumber: picked.flightNumber, flightId: String(picked.id), email: form.email.value.trim(), firstName: form.firstName.value.trim(), lastName: form.lastName.value.trim(), travelClass: form.travelClass.value, bookingStatus: form.bookingStatus.value};
 			} else {
-				payload = Object.fromEntries(E.fields.map((f) => [f.k, form[f.k].value.trim()]));
+				payload = Object.fromEntries(E.fields.map((f) => [f.k, f.type === 'checkbox' ? form[f.k].checked : form[f.k].value.trim()]));
 			}
 			const btn = form.querySelector('button[type=submit]');
 			btn.disabled = true;
@@ -1893,14 +1966,36 @@ class FlightStatusApp extends HTMLElement {
 		this._timer = setInterval(() => load().catch(() => {}), 30000);
 	}
 
+	// How to get to and from one airport, as written by the admin: a window with one photo card for each entry, grouped by category.
+	// A card shows the entry's own photo, or a photo of the airport's city when the admin gave none.
+	async showGuide(airport) {
+		const modal = document.createElement('div');
+		modal.className = 'fa-modal';
+		modal.innerHTML = `<div class="fa-modalbox fa-guidebox"><h2>To and from ${esc(airport.name)}</h2><div class="fa-guidebody"><p class="fa-panelnote">Loading...</p></div><button class="fa-btn block ghost" type="button">Close</button></div>`;
+		this.appendChild(modal);
+		modal.querySelector('.fa-btn').addEventListener('click', () => modal.remove());
+		modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+		const body = modal.querySelector('.fa-guidebody');
+		try {
+			const rows = await this.json('/o/flight-live/guides?siteId=' + SITE_ID() + '&airport=' + encodeURIComponent(airport.code));
+			const photo = (r) => (/^(https?:\/\/|\/)/i.test(r.imageUrl) ? `<div class="fa-guidephoto has-photo" style="background-image:url('${esc(r.imageUrl)}')">` : `<div class="fa-guidephoto" data-photo-city="${esc(airport.city)}" data-photo-country="${esc(airport.country)}">`);
+			body.innerHTML = rows.map((r) => `<div class="fa-guidecard">${photo(r)}<span class="fa-code">${esc(r.category)}</span></div><div class="fa-guidetext"><b>${esc(r.title)}</b>${r.details ? '<p>' + esc(r.details) + '</p>' : ''}${/^https?:\/\//i.test(r.link) ? '<a href="' + esc(r.link) + '" target="_blank" rel="noopener">Know more</a>' : ''}</div></div>`).join('') ||
+				'<p class="fa-panelnote">No travel information has been added for this airport yet.</p>';
+			fillAllPhotos(body);
+		} catch (e) {
+			body.innerHTML = '<p class="fa-panelnote">Could not load this information. Try again later.</p>';
+		}
+	}
+
 	async view_airports(view) {
 		const [ap, flights] = await Promise.all([this.airports(), this.flights()]);
 		const list = Object.values(ap);
 		const count = (id) => flights.filter((f) => f.originAirportId == id || f.destinationAirportId == id).length;
 		view.innerHTML = '<div class="fa-title"><h1>Airports</h1><p>' + list.length + ' airports in our network.</p></div><div class="fa-grid">' +
-			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span><small>${count(a.id)} flight(s) today</small></div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p>';
+			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span><small>${count(a.id)} flight(s) today</small><button type="button" class="fa-chip fa-getthere" data-code="${esc(a.code)}" data-name="${esc(a.name)}" data-city="${esc(a.city)}" data-country="${esc(a.country)}">To and from the airport</button></div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p>';
 		fillAllPhotos(view);
 		this.setupFilter(view, {key: 'airports', items: '.fa-card', placeholder: 'Search airport code, name, city or country'});
+		view.querySelectorAll('.fa-getthere').forEach((b) => b.addEventListener('click', () => this.showGuide(b.dataset)));
 	}
 
 
@@ -1916,6 +2011,52 @@ class FlightStatusApp extends HTMLElement {
 			});
 		}
 		return window._faQr;
+	}
+
+	// Notices the admin switched on, shown under the menu on every page. A visitor can close one; it stays closed for the rest of the visit.
+	async loadNotices() {
+		const box = this.querySelector('.fa-alerts');
+		if (!box) return;
+		const closed = (() => { try { return JSON.parse(sessionStorage.getItem('faClosedNotices') || '[]'); } catch (e) { return []; } })();
+		try {
+			const list = (await this.json('/o/flight-live/notices?siteId=' + SITE_ID())).filter((n) => !closed.includes(n.id));
+			box.innerHTML = list.map((n) => `<div class="fa-alertbar ${esc(n.level)}"><span>${ICONS.bell}</span><p>${esc(n.message)}</p><button type="button" data-id="${esc(n.id)}" aria-label="Close">&times;</button></div>`).join('');
+			box.hidden = !list.length;
+			this.classList.toggle('has-notices', !!list.length && box.classList.contains('first'));
+			box.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+				try { sessionStorage.setItem('faClosedNotices', JSON.stringify(closed.concat(b.dataset.id))); } catch (e) {}
+				b.parentElement.remove();
+				if (!box.children.length) { box.hidden = true; this.classList.remove('has-notices'); }
+			}));
+		} catch (e) {
+			box.hidden = true;
+		}
+	}
+
+	// "Special assistance" under a boarding pass: ask for help (the kinds come from the admin's list) and see the answer of the airport team.
+	async bindAssist(root, pass, site, call) {
+		try {
+			const [options, mine] = await Promise.all([this.json('/o/flight-live/assist-options?siteId=' + site), call('GET', '/assist?siteId=' + site)]);
+			const asked = mine.filter((r) => r.pnr.toUpperCase() === String(pass.pnr).toUpperCase());
+			root.innerHTML = '<h3>Special assistance</h3>' +
+				(asked.map((r) => `<p class="fa-assistrow"><b>${esc(r.assistanceType)}</b>${r.note && r.note !== 'null' ? ' &middot; ' + esc(r.note) : ''} <span class="fa-badge ${r.requestStatus === 'Done' ? 'landed' : 'boarding'}">${r.requestStatus === 'Done' ? 'Done' : 'Requested'}</span></p>`).join('') || '<p class="fa-panelnote">Need a wheelchair or help with luggage? Tell the airport team before you travel.</p>') +
+				(options.length ? '<form class="fa-assistform"><select name="type" required>' + options.map((o) => '<option>' + esc(o.name) + '</option>').join('') + '</select><input name="note" maxlength="200" placeholder="Anything we should know (optional)" /><button class="fa-btn block-auto" type="submit">Ask for help</button><div class="fa-error" hidden></div></form>' : '');
+			const form = root.querySelector('form');
+			if (!form) return;
+			form.addEventListener('submit', async (e) => {
+				e.preventDefault();
+				try {
+					await call('POST', '/assist', {siteId: site, pnr: pass.pnr, type: form.type.value, note: form.note.value});
+					this.bindAssist(root, pass, site, call);
+				} catch (x) {
+					const err = form.querySelector('.fa-error');
+					err.textContent = x.message;
+					err.hidden = false;
+				}
+			});
+		} catch (e) {
+			root.innerHTML = '';
+		}
 	}
 
 	passHtml(p, ap) {
@@ -1972,8 +2113,9 @@ class FlightStatusApp extends HTMLElement {
 			setTimeout(() => document.body.classList.remove('fa-print-mode'), 500);
 		};
 		const showPass = (box, p) => {
-			box.innerHTML = this.passHtml(p, ap) + '<div class="fa-pass-actions"><button class="fa-btn" type="button">Print / Save as PDF</button></div>';
+			box.innerHTML = this.passHtml(p, ap) + '<div class="fa-pass-actions"><button class="fa-btn" type="button">Print / Save as PDF</button></div><div class="fa-assist"></div>';
 			box.querySelector('button').addEventListener('click', printPass);
+			this.bindAssist(box.querySelector('.fa-assist'), p, site, call);
 			box.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 		};
 		const label = (f) => {
