@@ -880,7 +880,7 @@ class FlightStatusApp extends HTMLElement {
 			},
 			guides: {
 				label: 'Guide entry', plural: 'Airport guide', list: '/o/c/airportguides/scopes/' + site + '?pageSize=200', create: '/o/c/airportguides/scopes/' + site, item: '/o/c/airportguides/',
-				fields: [{k: 'airportCode', l: 'Airport', type: 'airport', req: true}, {k: 'category', l: 'Category (for example Taxi, Metro, Bus, Parking)', type: 'suggest', req: true}, {k: 'title', l: 'Title', req: true}, {k: 'details', l: 'Details (fares, timings, where to find it)', type: 'textarea'}, {k: 'link', l: 'Link (optional)'}, {k: 'imageUrl', l: 'Photo link (optional, a city photo is used when empty)'}],
+				fields: [{k: 'airportCode', l: 'Airport', type: 'airport', req: true}, {k: 'category', l: 'Category (for example Taxi, Metro, Bus, Parking)', type: 'suggest', req: true}, {k: 'title', l: 'Title', req: true}, {k: 'details', l: 'Details (fares, timings, where to find it)', type: 'textarea'}, {k: 'pickupPoints', l: 'Pick-up points (one on each line, for example Terminal 1: Arrivals Exit Gate)', type: 'textarea'}, {k: 'link', l: 'Link (optional)'}, {k: 'imageUrl', l: 'Photo link (optional, a city photo is used when empty)'}],
 				cols: [['airportCode', 'Airport'], ['category', 'Category'], ['title', 'Title'], ['details', 'Details']],
 			},
 			assistance: {
@@ -1805,7 +1805,6 @@ class FlightStatusApp extends HTMLElement {
 				(list.length ? list.map(row).join('') : '<div class="fa-msg">No flights found for this day. Try another day or airport. Our live data covers only some flights each day.</div>');
 			box.querySelectorAll('.fa-fhead').forEach((b) => b.addEventListener('click', () => { st.open.has(b.dataset.id) ? st.open.delete(b.dataset.id) : st.open.add(b.dataset.id); drawResults(); }));
 			box.querySelectorAll('[data-track]').forEach((b) => b.addEventListener('click', () => { st.tab = 'flight'; st.track = b.dataset.track; drawPane(); window.scrollTo({top: 0, behavior: 'smooth'}); }));
-			this.bindGuides(box, guides);
 			fillWeather();
 		};
 		const drawPane = () => {
@@ -1990,42 +1989,58 @@ class FlightStatusApp extends HTMLElement {
 		return this._guides;
 	}
 
-	// A "To and from the airport" button, only for an airport that has guide entries.
+	// A "To and from the airport" link, only for an airport that has guide entries. It opens the guide page of that airport.
 	guideButton(airport, rows, label) {
 		if (!airport || !airport.code || !rows.some((g) => g.airportCode.toUpperCase() === airport.code.toUpperCase())) return '';
-		return `<button type="button" class="fa-chip fa-getthere" data-code="${esc(airport.code)}" data-name="${esc(airport.name || airport.code)}" data-city="${esc(airport.city || '')}" data-country="${esc(airport.country || '')}">${esc(label)}</button>`;
+		return `<a class="fa-chip fa-getthere" href="${this._root}/airports?airport=${encodeURIComponent(airport.code)}">${esc(label)}</a>`;
 	}
 
-	bindGuides(root, rows) {
-		root.querySelectorAll('.fa-getthere').forEach((b) => b.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.showGuide(b.dataset, rows.filter((g) => g.airportCode.toUpperCase() === b.dataset.code.toUpperCase()));
-		}));
-	}
-
-	// How to get to and from one airport, as written by the admin: a window with one photo card for each entry.
-	// A card shows the entry's own photo, else the photo for its category (assets/guide/<category>.jpg, listed in credits.json), else a photo of the airport's city.
-	async showGuide(airport, rows) {
-		const modal = document.createElement('div');
-		modal.className = 'fa-modal';
-		modal.innerHTML = `<div class="fa-modalbox fa-guidebox"><h2>To and from ${esc(airport.name)}</h2><div class="fa-guidebody"></div><p class="fa-panelnote">Times, routes and prices can change. Check the airport or operator website before you travel. Photos: Wikimedia Commons.</p><button class="fa-btn block ghost" type="button">Close</button></div>`;
-		this.appendChild(modal);
-		modal.querySelector('.fa-btn').addEventListener('click', () => modal.remove());
-		modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-		this._guideCredits = this._guideCredits || this.json('/o/flight-status-app/guide/credits.json').catch(() => ({}));
-		const credits = await this._guideCredits;
-		const slug = (r) => String(r.category).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+	// The guide page of one airport (/airports?airport=DEL): a tab for each category the admin wrote about, and for the chosen tab
+	// a big photo beside the text and the pick-up points. A photo is the entry's own, else the category's (assets/guide/<category>.jpg
+	// listed in credits.json), else a photo of the airport's city.
+	async guidePage(view, code) {
+		const [ap, rows] = await Promise.all([this.airports(), this.guideRows()]);
+		const airport = Object.values(ap).find((a) => a.code.toUpperCase() === code.toUpperCase());
+		const mine = rows.filter((g) => g.airportCode.toUpperCase() === code.toUpperCase());
+		const back = `<a class="fa-backlink" href="${this._root}/airports">&larr; All airports</a>`;
+		if (!airport || !mine.length) {
+			view.innerHTML = `<div class="fa-title"><h1>To and from the airport</h1><p>${airport ? 'No travel information has been added for ' + esc(airport.name) + ' yet.' : 'We could not find this airport.'}</p></div>${back}`;
+			return;
+		}
+		const credits = await (this._guideCredits = this._guideCredits || this.json('/o/flight-status-app/guide/credits.json').catch(() => ({})));
+		const slug = (c) => String(c).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+		const categories = [...new Set(mine.map((g) => g.category))];
+		let tab = new URLSearchParams(location.search).get('tab');
+		if (!categories.includes(tab)) tab = categories[0];
 		const photo = (r) => {
-			if (/^(https?:\/\/|\/)/i.test(r.imageUrl)) return `<div class="fa-guidephoto has-photo" style="background-image:url('${esc(r.imageUrl)}')">`;
-			if (credits[slug(r)]) return `<div class="fa-guidephoto has-photo" title="Photo: ${esc(credits[slug(r)])}" style="background-image:url('/o/flight-status-app/guide/${esc(slug(r))}.jpg')">`;
-			return `<div class="fa-guidephoto" data-photo-city="${esc(airport.city)}" data-photo-country="${esc(airport.country)}">`;
+			if (/^(https?:\/\/|\/)/i.test(r.imageUrl)) return `<div class="fa-guideimg has-photo" style="background-image:url('${esc(r.imageUrl)}')"></div>`;
+			if (credits[slug(r.category)]) return `<div class="fa-guideimg has-photo" title="Photo: ${esc(credits[slug(r.category)])}" style="background-image:url('/o/flight-status-app/guide/${esc(slug(r.category))}.jpg')"></div>`;
+			return `<div class="fa-guideimg" data-photo-city="${esc(airport.city)}" data-photo-country="${esc(airport.country)}"></div>`;
 		};
-		const body = modal.querySelector('.fa-guidebody');
-		body.innerHTML = rows.map((r) => `<div class="fa-guidecard">${photo(r)}<span class="fa-code">${esc(r.category)}</span></div><div class="fa-guidetext"><b>${esc(r.title)}</b>${r.details ? '<p>' + esc(r.details) + '</p>' : ''}${/^https?:\/\//i.test(r.link) ? '<a href="' + esc(r.link) + '" target="_blank" rel="noopener">Know more</a>' : ''}</div></div>`).join('');
-		fillAllPhotos(body);
+		const lines = (text) => String(text || '').split('\n').map((x) => x.trim()).filter(Boolean);
+		const panel = (r) => `<div class="fa-guidepanel">${photo(r)}<div class="fa-guideinfo"><h2>${esc(r.title)}</h2>${lines(r.details).map((x) => '<p>' + esc(x) + '</p>').join('')}` +
+			(lines(r.pickupPoints).length ? '<h3>Pick-up points</h3><ul>' + lines(r.pickupPoints).map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') +
+			(/^https?:\/\//i.test(r.link) ? `<a class="fa-btn block-auto" href="${esc(r.link)}" target="_blank" rel="noopener">Know more</a>` : '') + '</div></div>';
+		const draw = () => {
+			view.querySelectorAll('.fa-tab').forEach((b) => b.classList.toggle('active', b.dataset.t === tab));
+			const box = view.querySelector('.fa-guideview');
+			box.innerHTML = mine.filter((g) => g.category === tab).map(panel).join('');
+			fillAllPhotos(box);
+		};
+		view.innerHTML = `<div class="fa-title"><h1>To and from ${esc(airport.name)}</h1><p>${esc(airport.city)}${airport.country ? ', ' + esc(airport.country) : ''}. Choose how you want to travel.</p></div>${back}` +
+			`<div class="fa-tabs fa-guidetabs">${categories.map((c) => `<button type="button" class="fa-tab" data-t="${esc(c)}">${esc(c)}</button>`).join('')}</div><div class="fa-guideview"></div>` +
+			'<p class="fa-panelnote">Times, routes and prices can change. Check the airport or operator website before you travel. Photos: Wikimedia Commons.</p>';
+		view.querySelectorAll('.fa-tab').forEach((b) => b.addEventListener('click', () => {
+			tab = b.dataset.t;
+			history.replaceState(null, '', location.pathname + '?airport=' + encodeURIComponent(code) + '&tab=' + encodeURIComponent(tab));
+			draw();
+		}));
+		draw();
 	}
 
 	async view_airports(view) {
+		const wanted = new URLSearchParams(location.search).get('airport');
+		if (wanted) return this.guidePage(view, wanted);
 		const [ap, flights, guides] = await Promise.all([this.airports(), this.flights(), this.guideRows()]);
 		const list = Object.values(ap);
 		const count = (id) => flights.filter((f) => f.originAirportId == id || f.destinationAirportId == id).length;
@@ -2033,7 +2048,6 @@ class FlightStatusApp extends HTMLElement {
 			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span><small>${count(a.id)} flight(s) today</small>${this.guideButton(a, guides, 'To and from the airport')}</div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p>';
 		fillAllPhotos(view);
 		this.setupFilter(view, {key: 'airports', items: '.fa-card', placeholder: 'Search airport code, name, city or country'});
-		this.bindGuides(view, guides);
 	}
 
 

@@ -276,7 +276,7 @@ public class LiveApplication extends Application {
             return Response.ok(
                 _rows(
                     "C_AirportGuide", siteId, v -> (airport == null) || airport.isBlank() || _text(v.get("airportCode")).equalsIgnoreCase(airport), "airportCode", "category", "title",
-                    "details", "link", "imageUrl").toString()).build();
+                    "details", "pickupPoints", "link", "imageUrl").toString()).build();
         }
         catch (Exception exception) {
             return Response.status(500).entity("{\"error\":\"Could not load the airport guide\"}").build();

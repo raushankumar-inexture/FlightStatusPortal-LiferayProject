@@ -1017,3 +1017,17 @@ flight-status-app a.fa-stat { color: inherit; transition: transform .15s; }
 flight-status-app a.fa-stat:hover { transform: translateY(-2px); }
 flight-status-app .fa-fshead .fa-getthere { margin-left: auto; }
 flight-status-app .fa-pass-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+
+/* Airport guide page */
+flight-status-app .fa-backlink { display: inline-block; margin: 0 0 1rem; color: var(--fa-blue); font-weight: 600; }
+flight-status-app .fa-guidepanel { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 2rem; align-items: center; margin-bottom: 1.5rem; padding: 1.5rem; background: linear-gradient(135deg, #f4f7ff, #fdf3f7); border-radius: var(--fa-radius); }
+flight-status-app .fa-guideimg { min-height: 20rem; border-radius: 14px; background: linear-gradient(135deg, #1c3a8a, #0b5fff) center / cover; }
+flight-status-app .fa-guideinfo h2 { margin: 0 0 .6rem; font-size: 1.7rem; }
+flight-status-app .fa-guideinfo p { margin: .4rem 0; color: #44506e; line-height: 1.6; }
+flight-status-app .fa-guideinfo h3 { margin: 1.1rem 0 .3rem; font-size: 1.05rem; }
+flight-status-app .fa-guideinfo ul { margin: 0 0 1rem; padding-left: 1.2rem; color: #44506e; line-height: 1.7; }
+flight-status-app .fa-guideinfo .fa-btn { display: inline-block; margin-top: .5rem; text-decoration: none; }
+@media (max-width: 800px) {
+	flight-status-app .fa-guidepanel { grid-template-columns: minmax(0, 1fr); padding: 1rem; }
+	flight-status-app .fa-guideimg { min-height: 12rem; }
+}
