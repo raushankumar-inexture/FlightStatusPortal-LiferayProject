@@ -1060,7 +1060,7 @@ class FlightStatusApp extends HTMLElement {
 				return;
 			}
 			card.innerHTML = '<h3>Live flight data</h3>' + (s.enabled
-				? '<p>Connected. Last sync: <b>' + (s.lastRun === 'never' ? 'never' : esc(fmtDate(s.lastRun) + ' ' + fmtTime(s.lastRun))) + '</b></p><p class="fa-panelnote">' + esc(message || s.lastResult) + '</p><p>Calls this month: <b>' + esc(s.callsThisMonth) + ' of ' + esc(s.monthlyLimit) + '</b></p><button class="fa-btn block-auto fa-feedsync" type="button">Sync now</button>'
+				? '<p>Connected. Last sync: <b>' + (s.lastRun === 'never' ? 'never' : esc(fmtDate(s.lastRun) + ' ' + fmtTime(s.lastRun))) + '</b></p><p class="fa-panelnote">' + esc(message || s.lastResult) + '</p><p>Calls this month: <b>' + esc(s.callsThisMonth) + ' of ' + esc(s.monthlyLimit) + '</b></p><p class="fa-panelnote">Live check of planes in the air (every 2 minutes, free): <b>' + esc(s.liveLast && s.liveLast.indexOf('T') > 0 ? fmtTime(s.liveLast.split(' ')[0]) + ' ' + s.liveLast.slice(s.liveLast.indexOf(' ')) : (s.liveLast || 'not yet')) + '</b><br>Webhook: <b>' + (s.webhookOn ? 'on (POST /o/flight-feed/webhook)' : 'off') + '</b></p><button class="fa-btn block-auto fa-feedsync" type="button">Sync now</button>'
 				: '<p>Not connected.</p><p class="fa-panelnote">Add <b>FEED_API_KEY</b> to <b>bundles/data/flight-feed.properties</b> (a free key from aviationstack.com) to load real flights and delays automatically. Flights you type in yourself are never changed by the feed.</p>');
 			const btn = card.querySelector('.fa-feedsync');
 			if (btn) btn.addEventListener('click', async () => {

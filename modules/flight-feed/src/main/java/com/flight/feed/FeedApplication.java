@@ -22,7 +22,9 @@ import com.liferay.portal.kernel.util.PropsUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.Path;
@@ -127,9 +129,17 @@ public class FeedApplication extends Application {
 				return thread;
 			});
 
-		// Looks every 10 minutes; a real call happens only when the key is set and the wait time has passed.
+		// Every 2 minutes: (1) free live check of the planes that are in the air, (2) the provider sync
+		// only when the key is set and the wait time has passed (it uses the limited monthly calls).
 		_scheduler.scheduleWithFixedDelay(
 			() -> {
+				try {
+					_liveCheck();
+				}
+				catch (Exception exception) {
+					_log.error("Live position check failed", exception);
+				}
+
 				try {
 					long hours = _number(_setting("FEED_INTERVAL_HOURS"), 8);
 
@@ -141,7 +151,7 @@ public class FeedApplication extends Application {
 					_log.error("Flight feed check failed", exception);
 				}
 			},
-			1, 10, TimeUnit.MINUTES);
+			1, 2, TimeUnit.MINUTES);
 	}
 
 	@Deactivate
@@ -168,6 +178,9 @@ public class FeedApplication extends Application {
 		out.put("callsThisMonth", _usage()[0]);
 		out.put("monthlyLimit", _number(_setting("FEED_MONTHLY_LIMIT"), 90));
 		out.put("airports", _setting("FEED_AIRPORTS") == null ? "" : _setting("FEED_AIRPORTS"));
+		out.put("liveLast", _liveLast);
+		out.put("liveUpdated", _liveUpdated);
+		out.put("webhookOn", (_setting("FEED_WEBHOOK_SECRET") != null) && !_setting("FEED_WEBHOOK_SECRET").isBlank());
 
 		return Response.ok(out.toString()).build();
 	}
@@ -359,6 +372,265 @@ public class FeedApplication extends Application {
 			_log.error("Flight feed sync failed", exception);
 
 			return _error(500, "The sync failed: " + exception.getMessage());
+		}
+	}
+
+	private String _liveLast = "not yet";
+
+	private int _liveUpdated = 0;
+
+	private static final Map<String, String> _AIRLINES = new HashMap<>();
+
+	private static final Map<String, double[]> _PLACES = new HashMap<>();
+
+	static {
+		for (String pair : new String[] {
+				"AI=AIC", "6E=IGO", "UK=VTI", "SG=SEJ", "QP=AKJ", "IX=AXB", "I5=IAD", "G8=GOW", "S2=JLL", "EK=UAE", "QR=QTR", "EY=ETD",
+				"SQ=SIA", "BA=BAW", "LH=DLH", "AF=AFR", "KL=KLM", "TK=THY", "UA=UAL", "AA=AAL", "DL=DAL", "VS=VIR", "AC=ACA", "QF=QFA"
+			}) {
+
+			_AIRLINES.put(pair.substring(0, 2), pair.substring(3));
+		}
+
+		// Airport positions (latitude, longitude) used to work out how far a plane still has to fly.
+		for (String place : new String[] {
+				"DEL=28.5562,77.1000", "BOM=19.0896,72.8656", "BLR=13.1986,77.7066", "MAA=12.9941,80.1709", "HYD=17.2403,78.4294",
+				"CCU=22.6547,88.4467", "AMD=23.0772,72.6347", "DXB=25.2532,55.3657", "LHR=51.4700,-0.4543", "SIN=1.3644,103.9915",
+				"JFK=40.6413,-73.7781", "LAX=33.9416,-118.4085", "GOI=15.3808,73.8314", "COK=10.1520,76.4019", "PNQ=18.5821,73.9197"
+			}) {
+
+			String[] parts = place.substring(4).split(",");
+
+			_PLACES.put(place.substring(0, 3), new double[] {Double.parseDouble(parts[0]), Double.parseDouble(parts[1])});
+		}
+	}
+
+	/**
+	 * Free live check (adsb.fi, no key). For each flight that should be in the air right now, finds the plane,
+	 * works out when it will land (distance left / speed) and updates the arrival time and the delay when the
+	 * change is 5 minutes or more. A plane on the ground at its destination is marked Landed.
+	 * Changed flights are picked up by the alert module, which sends the e-mails and notifications.
+	 */
+	private void _liveCheck() throws Exception {
+		long companyId = PortalUtil.getDefaultCompanyId();
+
+		ObjectDefinition flightDefinition = _objectDefinitionLocalService.getObjectDefinition(companyId, "C_Flight");
+		ObjectDefinition airportDefinition = _objectDefinitionLocalService.getObjectDefinition(companyId, "C_Airport");
+
+		Map<Long, String> codes = new HashMap<>();
+
+		for (ObjectEntry airport : _objectEntryLocalService.getObjectEntries(0, airportDefinition.getObjectDefinitionId(), 0, 500)) {
+			codes.put(airport.getObjectEntryId(), String.valueOf(airport.getValues().get("code")).toUpperCase());
+		}
+
+		long now = System.currentTimeMillis();
+		int checked = 0, updated = 0;
+
+		for (ObjectEntry entry : _objectEntryLocalService.getObjectEntries(_SITE_ID, flightDefinition.getObjectDefinitionId(), 0, 1000)) {
+			Map<String, Serializable> v = entry.getValues();
+
+			String status = String.valueOf(v.get("showstatus"));
+
+			if (!"feed".equals(String.valueOf(v.get("source"))) || "Landed".equals(status) || "Cancelled".equals(status) ||
+				!(v.get("departureTime") instanceof Date) || !(v.get("arrivalTime") instanceof Date)) {
+
+				continue;
+			}
+
+			long dep = ((Date)v.get("departureTime")).getTime(), arr = ((Date)v.get("arrivalTime")).getTime();
+
+			// Only flights that should be flying now (or are about to leave), at most 12 per round.
+			if ((dep > (now + 30 * 60_000L)) || (arr < (now - 3 * 3_600_000L)) || (checked >= 12)) {
+				continue;
+			}
+
+			String number = String.valueOf(v.get("flightNumber")).toUpperCase();
+			String icao = _AIRLINES.get(number.substring(0, Math.min(2, number.length())));
+			double[] to = _PLACES.get(codes.get(Long.valueOf(String.valueOf(v.get("r_destinationAirport_c_airportId")))));
+
+			if ((icao == null) || (to == null)) {
+				continue;
+			}
+
+			checked++;
+
+			JSONObject plane = _plane(icao + number.substring(2));
+
+			Thread.sleep(1100);
+
+			if (plane == null) {
+				continue;
+			}
+
+			boolean onGround = "ground".equals(plane.getString("alt_baro"));
+			double km = _km(plane.getDouble("lat"), plane.getDouble("lon"), to[0], to[1]);
+
+			Map<String, Serializable> changes = new HashMap<>();
+
+			if (onGround && (km < 10) && (dep < now)) {
+				changes.put("showstatus", "Landed");
+				changes.put("arrivalTime", new Date(now));
+			}
+			else if (!onGround) {
+				// 8 minutes are added for the slow approach and taxi to the gate.
+				long eta = now + Math.round((km / (Math.max(plane.getDouble("gs"), 150) * 1.852)) * 3_600_000L) + 8 * 60_000L;
+
+				if (Math.abs(eta - arr) < 5 * 60_000L) {
+					continue;
+				}
+
+				changes.put("arrivalTime", new Date(eta));
+
+				if (v.get("scheduledArrival") instanceof Date) {
+					int late = (int)Math.max(0, (eta - ((Date)v.get("scheduledArrival")).getTime()) / 60_000L);
+
+					changes.put("delayMinutes", late);
+					changes.put("showstatus", (late >= 15) ? "Delayed" : "Departed");
+				}
+				else if (!"Delayed".equals(status)) {
+					changes.put("showstatus", "Departed");
+				}
+			}
+
+			if (!changes.isEmpty()) {
+				_change(entry, changes);
+
+				updated++;
+			}
+		}
+
+		_liveLast = Instant.now().toString() + " (" + checked + " flights checked, " + updated + " updated)";
+		_liveUpdated += updated;
+	}
+
+	/** The plane flying under this callsign (for example AIC101), or null. Free adsb.fi data. */
+	private static JSONObject _plane(String callsign) {
+		try {
+			JSONObject body = _get("https://opendata.adsb.fi/api/v2/callsign/" + callsign);
+			JSONArray list = body.getJSONArray("ac");
+
+			for (int i = 0; (list != null) && (i < list.length()); i++) {
+				if (list.getJSONObject(i).has("lat") && list.getJSONObject(i).has("lon")) {
+					return list.getJSONObject(i);
+				}
+			}
+		}
+		catch (Exception exception) {
+			_log.debug("No live position for " + callsign + ": " + exception.getMessage());
+		}
+
+		return null;
+	}
+
+	private static double _km(double lat1, double lon1, double lat2, double lon2) {
+		double dLat = Math.toRadians(lat2 - lat1), dLon = Math.toRadians(lon2 - lon1);
+		double a = Math.pow(Math.sin(dLat / 2), 2) + (Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.pow(Math.sin(dLon / 2), 2));
+
+		return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+	}
+
+	/** Saves new values on a flight, keeping every other value. */
+	private void _change(ObjectEntry entry, Map<String, Serializable> changes) throws Exception {
+		long companyId = PortalUtil.getDefaultCompanyId();
+
+		ServiceContext sc = new ServiceContext();
+
+		sc.setCompanyId(companyId);
+		sc.setScopeGroupId(_SITE_ID);
+		sc.setUserId(UserLocalServiceUtil.getDefaultUserId(companyId));
+
+		Map<String, Serializable> merged = new HashMap<>(entry.getValues());
+
+		merged.putAll(changes);
+
+		_objectEntryLocalService.updateObjectEntry(sc.getUserId(), entry.getObjectEntryId(), entry.getObjectEntryFolderId(), merged, sc);
+	}
+
+	/**
+	 * Webhook: a flight data provider (or any system) can push a change here the moment it happens.
+	 * Send POST /o/flight-feed/webhook with the header X-Webhook-Secret (FEED_WEBHOOK_SECRET in flight-feed.properties)
+	 * and a JSON body such as {"flight":"AI101","date":"2026-11-12","status":"Delayed","delayMinutes":25,
+	 * "arrivalTime":"2026-11-12T14:30:00Z","depGate":"A4"}. Only flights from the feed are changed.
+	 */
+	@POST
+	@Path("/webhook")
+	@Consumes(MediaType.APPLICATION_JSON)
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response webhook(@Context HttpServletRequest request, @HeaderParam("X-Webhook-Secret") String secret, String body) {
+		try {
+			String expected = _setting("FEED_WEBHOOK_SECRET");
+
+			if ((expected == null) || expected.isBlank()) {
+				return _error(503, "The webhook is switched off. Add FEED_WEBHOOK_SECRET to flight-feed.properties.");
+			}
+
+			if ((secret == null) || !java.security.MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), secret.getBytes(StandardCharsets.UTF_8))) {
+				return _error(403, "Wrong secret");
+			}
+
+			JSONObject json = JSONFactoryUtil.createJSONObject(body);
+			String number = json.getString("flight").toUpperCase().replaceAll("\\s", "");
+
+			if (number.isEmpty()) {
+				return _error(400, "flight is required");
+			}
+
+			Map<String, Serializable> changes = new HashMap<>();
+			String status = json.getString("status");
+
+			if (!status.isEmpty()) {
+				if (!java.util.Arrays.asList("OnTime", "Delayed", "Boarding", "Departed", "Landed", "Cancelled").contains(status)) {
+					return _error(400, "status must be OnTime, Delayed, Boarding, Departed, Landed or Cancelled");
+				}
+
+				changes.put("showstatus", status);
+			}
+
+			if (json.has("delayMinutes")) {
+				changes.put("delayMinutes", Math.max(0, json.getInt("delayMinutes")));
+			}
+
+			for (String name : new String[] {"departureTime", "arrivalTime"}) {
+				if (!json.getString(name).isEmpty()) {
+					changes.put(name, Date.from(OffsetDateTime.parse(json.getString(name)).toInstant()));
+				}
+			}
+
+			for (String name : new String[] {"depGate", "arrGate", "depTerminal", "arrTerminal"}) {
+				if (json.has(name)) {
+					changes.put(name, json.getString(name));
+				}
+			}
+
+			if (changes.isEmpty()) {
+				return _error(400, "Nothing to change");
+			}
+
+			long companyId = PortalUtil.getDefaultCompanyId();
+			ObjectDefinition definition = _objectDefinitionLocalService.getObjectDefinition(companyId, "C_Flight");
+			String day = json.getString("date");
+			int changed = 0;
+
+			for (ObjectEntry entry : _objectEntryLocalService.getObjectEntries(_SITE_ID, definition.getObjectDefinitionId(), 0, 1000)) {
+				Map<String, Serializable> v = entry.getValues();
+
+				if (number.equals(String.valueOf(v.get("flightNumber")).toUpperCase()) && "feed".equals(String.valueOf(v.get("source"))) &&
+					(day.isEmpty() || ((v.get("departureTime") instanceof Date) && day.equals(_day((Date)v.get("departureTime")))))) {
+
+					_change(entry, changes);
+
+					changed++;
+				}
+			}
+
+			_log.info("Flight feed webhook: " + number + " changed on " + changed + " flight(s)");
+
+			return Response.ok("{\"changed\":" + changed + "}").build();
+		}
+		catch (Exception exception) {
+			_log.error("Flight feed webhook failed", exception);
+
+			return _error(400, "Could not use the message: " + exception.getMessage());
 		}
 	}
 
