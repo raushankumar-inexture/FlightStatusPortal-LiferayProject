@@ -398,7 +398,7 @@ class FlightStatusApp extends HTMLElement {
 		const crumbs = (!adminMode && crumbLabel && !['home', 'login', 'register'].includes(current))
 			? '<nav class="fa-crumbs" aria-label="Breadcrumb"><a href="' + root + '/home">Home</a><span>&rsaquo;</span><b>' + esc(crumbLabel) + '</b></nav>' : '';
 
-		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users'], ['gate', 'Gate scan', 'scan'], ['track', 'Track flight', 'search'], ['assistance', 'Assistance', 'users'], ['notices', 'Notices', 'bell'], ['guides', 'Airport guide', 'map'], ['helpoptions', 'Help options', 'shield']];
+		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users'], ['gate', 'Gate scan', 'scan'], ['track', 'Track flight', 'search'], ['assistance', 'Assistance', 'users'], ['notices', 'Notices', 'bell'], ['guides', 'Airport guide', 'map'], ['terminals', 'Terminals', 'building'], ['pickups', 'Pick-up points', 'gate'], ['helpoptions', 'Help options', 'shield']];
 		const sidebar = sidebarMode ? '<aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
 			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '';
 		this.classList.toggle('has-sidebar', sidebarMode);
@@ -882,6 +882,16 @@ class FlightStatusApp extends HTMLElement {
 				label: 'Guide entry', plural: 'Airport guide', list: '/o/c/airportguides/scopes/' + site + '?pageSize=200', create: '/o/c/airportguides/scopes/' + site, item: '/o/c/airportguides/',
 				fields: [{k: 'airportCode', l: 'Airport', type: 'airport', req: true}, {k: 'category', l: 'Category (for example Taxi, Metro, Bus, Parking)', type: 'suggest', req: true}, {k: 'title', l: 'Title', req: true}, {k: 'details', l: 'Details (fares, timings, where to find it)', type: 'textarea'}, {k: 'pickupPoints', l: 'Pick-up points (one on each line, for example Terminal 1: Arrivals Exit Gate)', type: 'textarea'}, {k: 'link', l: 'Link (optional)'}, {k: 'imageUrl', l: 'Photo link (optional, a city photo is used when empty)'}],
 				cols: [['airportCode', 'Airport'], ['category', 'Category'], ['title', 'Title'], ['details', 'Details']],
+			},
+			terminals: {
+				label: 'Terminal', plural: 'Terminals', list: '/o/c/airportterminals/scopes/' + site + '?pageSize=200', create: '/o/c/airportterminals/scopes/' + site, item: '/o/c/airportterminals/',
+				fields: [{k: 'airportCode', l: 'Airport', type: 'airport', req: true}, {k: 'name', l: 'Terminal name (for example Terminal 1)', req: true}, {k: 'latitude', l: 'Latitude (optional, from Google Maps: right-click the place and copy the numbers)'}, {k: 'longitude', l: 'Longitude (optional)'}],
+				cols: [['airportCode', 'Airport'], ['name', 'Terminal'], ['latitude', 'Latitude'], ['longitude', 'Longitude']],
+			},
+			pickups: {
+				label: 'Pick-up point', plural: 'Pick-up points', list: '/o/c/pickuppoints/scopes/' + site + '?pageSize=200', create: '/o/c/pickuppoints/scopes/' + site, item: '/o/c/pickuppoints/',
+				fields: [{k: 'airportCode', l: 'Airport', type: 'airport', req: true}, {k: 'category', l: 'Category (the same word as in the Airport guide, for example Taxi)', type: 'suggest', req: true}, {k: 'terminal', l: 'Terminal (the same name as in Terminals)', type: 'suggest', req: true}, {k: 'name', l: 'Name of the place (for example Arrivals Exit Gate)', req: true}, {k: 'steps', l: 'How to get there from the terminal (one step on each line)', type: 'textarea'}, {k: 'latitude', l: 'Latitude (optional)'}, {k: 'longitude', l: 'Longitude (optional)'}],
+				cols: [['airportCode', 'Airport'], ['category', 'Category'], ['terminal', 'Terminal'], ['name', 'Place'], ['steps', 'Steps']],
 			},
 			assistance: {
 				label: 'Request', plural: 'Assistance requests', list: '/o/c/assistancerequests/scopes/' + site + '?pageSize=200&sort=dateCreated:desc', create: '/o/c/assistancerequests/scopes/' + site, item: '/o/c/assistancerequests/', noAdd: true,
@@ -1999,7 +2009,9 @@ class FlightStatusApp extends HTMLElement {
 	// a big photo beside the text and the pick-up points. A photo is the entry's own, else the category's (assets/guide/<category>.jpg
 	// listed in credits.json), else a photo of the airport's city.
 	async guidePage(view, code) {
-		const [ap, rows] = await Promise.all([this.airports(), this.guideRows()]);
+		const site = SITE_ID(), query = '?siteId=' + site + '&airport=' + encodeURIComponent(code);
+		const [ap, rows, terminals, pickups] = await Promise.all([
+			this.airports(), this.guideRows(), this.json('/o/flight-live/terminals' + query).catch(() => []), this.json('/o/flight-live/pickups' + query).catch(() => [])]);
 		const airport = Object.values(ap).find((a) => a.code.toUpperCase() === code.toUpperCase());
 		const mine = rows.filter((g) => g.airportCode.toUpperCase() === code.toUpperCase());
 		const back = `<a class="fa-backlink" href="${this._root}/airports">&larr; All airports</a>`;
@@ -2009,32 +2021,77 @@ class FlightStatusApp extends HTMLElement {
 		}
 		const credits = await (this._guideCredits = this._guideCredits || this.json('/o/flight-status-app/guide/credits.json').catch(() => ({})));
 		const slug = (c) => String(c).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+		const lines = (text) => String(text || '').split('\n').map((x) => x.trim()).filter(Boolean);
 		const categories = [...new Set(mine.map((g) => g.category))];
-		let tab = new URLSearchParams(location.search).get('tab');
+		const params = new URLSearchParams(location.search);
+		let tab = params.get('tab'), terminal = params.get('terminal');
 		if (!categories.includes(tab)) tab = categories[0];
+		if (!terminals.some((t) => t.name === terminal)) terminal = terminals.length ? terminals[0].name : '';
+		const isNum = (a, b) => isFinite(parseFloat(a)) && isFinite(parseFloat(b));
+		const termOf = (name) => terminals.find((t) => t.name === name);
+		const place = (p) => [p.name, p.terminal, airport.name].filter(Boolean).join(', ');
+		// Google Maps walking directions from the terminal to the place: by position when we have it, else by name.
+		const navUrl = (p) => {
+			const t = termOf(p.terminal);
+			const from = t && isNum(t.latitude, t.longitude) ? t.latitude + ',' + t.longitude : [p.terminal, airport.name].filter(Boolean).join(', ');
+			const to = isNum(p.latitude, p.longitude) ? p.latitude + ',' + p.longitude : place(p);
+			return 'https://www.google.com/maps/dir/?api=1&travelmode=walking&origin=' + encodeURIComponent(from) + '&destination=' + encodeURIComponent(to);
+		};
 		const photo = (r) => {
 			if (/^(https?:\/\/|\/)/i.test(r.imageUrl)) return `<div class="fa-guideimg has-photo" style="background-image:url('${esc(r.imageUrl)}')"></div>`;
 			if (credits[slug(r.category)]) return `<div class="fa-guideimg has-photo" title="Photo: ${esc(credits[slug(r.category)])}" style="background-image:url('/o/flight-status-app/guide/${esc(slug(r.category))}.jpg')"></div>`;
 			return `<div class="fa-guideimg" data-photo-city="${esc(airport.city)}" data-photo-country="${esc(airport.country)}"></div>`;
 		};
-		const lines = (text) => String(text || '').split('\n').map((x) => x.trim()).filter(Boolean);
-		const panel = (r) => `<div class="fa-guidepanel">${photo(r)}<div class="fa-guideinfo"><h2>${esc(r.title)}</h2>${lines(r.details).map((x) => '<p>' + esc(x) + '</p>').join('')}` +
-			(lines(r.pickupPoints).length ? '<h3>Pick-up points</h3><ul>' + lines(r.pickupPoints).map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') +
+		const panel = (r, hasPoints) => `<div class="fa-guidepanel">${photo(r)}<div class="fa-guideinfo"><h2>${esc(r.title)}</h2>${lines(r.details).map((x) => '<p>' + esc(x) + '</p>').join('')}` +
+			(!hasPoints && lines(r.pickupPoints).length ? '<h3>Pick-up points</h3><ul>' + lines(r.pickupPoints).map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') +
 			(/^https?:\/\//i.test(r.link) ? `<a class="fa-btn block-auto" href="${esc(r.link)}" target="_blank" rel="noopener">Know more</a>` : '') + '</div></div>';
-		const draw = () => {
-			view.querySelectorAll('.fa-tab').forEach((b) => b.classList.toggle('active', b.dataset.t === tab));
-			const box = view.querySelector('.fa-guideview');
-			box.innerHTML = mine.filter((g) => g.category === tab).map(panel).join('');
-			fillAllPhotos(box);
+		const pointCard = (p) => `<div class="fa-pickup"><div><b>${esc(p.name)}</b> <span class="fa-chip small">${esc(p.terminal)}</span>` +
+			(lines(p.steps).length ? '<ol>' + lines(p.steps).map((x) => '<li>' + esc(x) + '</li>').join('') + '</ol>' : '<p class="fa-panelnote">Walking steps have not been added yet.</p>') +
+			`</div><a class="fa-btn block-auto" href="${esc(navUrl(p))}" target="_blank" rel="noopener">Navigate in Google Maps</a></div>`;
+		const hasMapData = terminals.some((t) => isNum(t.latitude, t.longitude)) || pickups.some((p) => isNum(p.latitude, p.longitude));
+		let map = null, layer = null;
+		const drawMap = async (list) => {
+			const box = view.querySelector('.fa-guidemap');
+			if (!box || !hasMapData) return;
+			try { await this.loadLeaflet(); } catch (e) { return; }
+			if (!map) {
+				map = L.map(box, {scrollWheelZoom: false});
+				L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap'}).addTo(map);
+			}
+			if (layer) layer.remove();
+			layer = L.layerGroup().addTo(map);
+			const spots = [];
+			terminals.filter((t) => isNum(t.latitude, t.longitude)).forEach((t) => {
+				const here = t.name === terminal;
+				L.circleMarker([t.latitude, t.longitude], {radius: here ? 10 : 7, color: '#fff', weight: 2, fillColor: '#0b5fff', fillOpacity: 1}).bindTooltip(t.name, {permanent: here}).addTo(layer);
+				spots.push([parseFloat(t.latitude), parseFloat(t.longitude)]);
+			});
+			list.filter((p) => isNum(p.latitude, p.longitude)).forEach((p) => {
+				L.circleMarker([p.latitude, p.longitude], {radius: 8, color: '#fff', weight: 2, fillColor: '#ffb800', fillOpacity: 1}).bindTooltip(p.name, {permanent: true, direction: 'top'}).addTo(layer);
+				spots.push([parseFloat(p.latitude), parseFloat(p.longitude)]);
+			});
+			if (spots.length) map.fitBounds(spots, {padding: [40, 40], maxZoom: 18});
+			setTimeout(() => map.invalidateSize(), 100);
 		};
+		const draw = () => {
+			view.querySelectorAll('.fa-guidetabs .fa-tab').forEach((b) => b.classList.toggle('active', b.dataset.t === tab));
+			view.querySelectorAll('.fa-terminalbar .fa-chip').forEach((b) => b.classList.toggle('active', b.dataset.n === terminal));
+			const inTab = pickups.filter((p) => p.category === tab);
+			const shown = inTab.filter((p) => !terminal || p.terminal === terminal);
+			const box = view.querySelector('.fa-guideview');
+			box.innerHTML = mine.filter((g) => g.category === tab).map((r) => panel(r, inTab.length > 0)).join('') +
+				(inTab.length ? '<section class="fa-pickups"><h3>Pick-up points' + (terminal ? ' at ' + esc(terminal) : '') + '</h3>' + (shown.map(pointCard).join('') || '<p class="fa-panelnote">No pick-up point is listed for this terminal in this category.</p>') + '</section>' : '');
+			fillAllPhotos(box);
+			drawMap(shown);
+		};
+		const url = () => history.replaceState(null, '', location.pathname + '?airport=' + encodeURIComponent(code) + '&tab=' + encodeURIComponent(tab) + (terminal ? '&terminal=' + encodeURIComponent(terminal) : ''));
 		view.innerHTML = `<div class="fa-title"><h1>To and from ${esc(airport.name)}</h1><p>${esc(airport.city)}${airport.country ? ', ' + esc(airport.country) : ''}. Choose how you want to travel.</p></div>${back}` +
+			(terminals.length ? `<div class="fa-terminalbar"><span>Where are you?</span>${terminals.map((t) => `<button type="button" class="fa-chip" data-n="${esc(t.name)}">${esc(t.name)}</button>`).join('')}</div>` : '') +
 			`<div class="fa-tabs fa-guidetabs">${categories.map((c) => `<button type="button" class="fa-tab" data-t="${esc(c)}">${esc(c)}</button>`).join('')}</div><div class="fa-guideview"></div>` +
-			'<p class="fa-panelnote">Times, routes and prices can change. Check the airport or operator website before you travel. Photos: Wikimedia Commons.</p>';
-		view.querySelectorAll('.fa-tab').forEach((b) => b.addEventListener('click', () => {
-			tab = b.dataset.t;
-			history.replaceState(null, '', location.pathname + '?airport=' + encodeURIComponent(code) + '&tab=' + encodeURIComponent(tab));
-			draw();
-		}));
+			(hasMapData ? '<div class="fa-guidemap"></div>' : '') +
+			`<p class="fa-panelnote">Times, routes and prices can change. Check the airport or operator website before you travel. Photos: Wikimedia Commons. <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(airport.name)}" target="_blank" rel="noopener">Open the airport in Google Maps</a></p>`;
+		view.querySelectorAll('.fa-guidetabs .fa-tab').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.t; url(); draw(); }));
+		view.querySelectorAll('.fa-terminalbar .fa-chip').forEach((b) => b.addEventListener('click', () => { terminal = b.dataset.n; url(); draw(); }));
 		draw();
 	}
 
