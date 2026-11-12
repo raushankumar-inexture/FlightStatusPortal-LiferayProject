@@ -106,6 +106,106 @@ public class LiveTracker {
         return _cache;
     }
 
+    /** Airline code (as on a ticket) to the radio callsign prefix used on air, for flights we are asked to track by number. */
+    private static final Map<String, String> _CALLSIGNS = new LinkedHashMap<>();
+
+    static {
+        String[] pairs = {
+            "AI=AIC", "6E=IGO", "UK=VTI", "SG=SEJ", "QP=AKJ", "IX=AXB", "I5=IAD", "G8=GOW", "S2=JLL", "EK=UAE", "QR=QTR", "EY=ETD",
+            "SQ=SIA", "TG=THA", "MH=MAS", "CX=CPA", "BA=BAW", "LH=DLH", "AF=AFR", "KL=KLM", "TK=THY", "UA=UAL", "AA=AAL", "DL=DAL",
+            "AC=ACA", "QF=QFA", "SV=SVA", "GF=GFA", "WY=OMA", "FZ=FDB", "G9=ABY", "TR=TGW", "AK=AXM", "VS=VIR", "LX=SWR", "OS=AUA",
+            "NH=ANA", "JL=JAL", "KE=KAL", "OZ=AAR", "CA=CCA", "MU=CES", "CZ=CSN", "ET=ETH", "SA=SAA", "KQ=KQA", "MS=MSR", "PK=PIA",
+            "BG=BBC", "UL=ALK", "RJ=RJA", "AZ=ITY", "IB=IBE", "TP=TAP", "SK=SAS", "AY=FIN", "EI=EIN", "LO=LOT", "VY=VLG", "FR=RYR",
+            "U2=EZY", "W6=WZZ", "B6=JBU", "WN=SWA", "AS=ASA", "HA=HAL", "NZ=ANZ", "EW=EWG", "DE=CFG", "LA=LAN", "AV=AVA", "AM=AMX"
+        };
+
+        for (String pair : pairs) {
+            _CALLSIGNS.put(pair.substring(0, 2), pair.substring(3));
+        }
+    }
+
+    private static final Map<String, Object[]> _trackCache = new LinkedHashMap<>();
+
+    /**
+     * Aircraft that are flying right now under a flight number such as AI101 or 6E606, or under a callsign such as
+     * AIC101, anywhere in the world (from adsb.fi). Answers are kept for 20 seconds.
+     */
+    public static JSONObject track(String query) throws Exception {
+        String q = query.toUpperCase().replaceAll("[\\s-]", "");
+
+        String callsign = q;
+
+        if (q.matches("[A-Z0-9]{2}\\d{1,4}[A-Z]?") && _CALLSIGNS.containsKey(q.substring(0, 2))) {
+            callsign = _CALLSIGNS.get(q.substring(0, 2)) + q.substring(2);
+        }
+
+        JSONObject out = JSONFactoryUtil.createJSONObject();
+
+        out.put("query", q);
+        out.put("callsign", callsign);
+
+        if (!callsign.matches("[A-Z0-9]{3,8}")) {
+            out.put("aircraft", JSONFactoryUtil.createJSONArray());
+
+            return out;
+        }
+
+        JSONArray found;
+
+        synchronized (_trackCache) {
+            Object[] hit = _trackCache.get(callsign);
+
+            if ((hit != null) && ((System.currentTimeMillis() - (Long)hit[0]) < _CACHE_MILLIS)) {
+                found = (JSONArray)hit[1];
+            }
+            else {
+                found = JSONFactoryUtil.createJSONArray();
+
+                synchronized (LiveTracker.class) {
+                    _throttle();
+
+                    JSONObject body = JSONFactoryUtil.createJSONObject(_get(_BASE + "/callsign/" + callsign));
+
+                    // this endpoint names the list "ac"; the area endpoints name it "aircraft"
+                    JSONArray list = body.has("ac") ? body.getJSONArray("ac") : body.getJSONArray("aircraft");
+
+                    for (int i = 0; (list != null) && (i < list.length()); i++) {
+                        JSONObject a = list.getJSONObject(i);
+
+                        if (!a.has("lat") || !a.has("lon")) {
+                            continue;
+                        }
+
+                        JSONObject o = JSONFactoryUtil.createJSONObject();
+
+                        o.put("hex", a.getString("hex"));
+                        o.put("callsign", a.getString("flight").trim());
+                        o.put("lat", a.getDouble("lat"));
+                        o.put("lon", a.getDouble("lon"));
+                        o.put("onGround", "ground".equals(a.getString("alt_baro")));
+                        o.put("altitude", a.getInt("alt_baro", 0));
+                        o.put("speed", Math.round(a.getDouble("gs")));
+                        o.put("track", Math.round(a.getDouble("track")));
+                        o.put("type", a.getString("t"));
+                        o.put("registration", a.getString("r"));
+
+                        found.put(o);
+                    }
+                }
+
+                _trackCache.put(callsign, new Object[] {System.currentTimeMillis(), found});
+
+                if (_trackCache.size() > 200) {
+                    _trackCache.remove(_trackCache.keySet().iterator().next());
+                }
+            }
+        }
+
+        out.put("aircraft", found);
+
+        return out;
+    }
+
     private static final int _CITY_RADIUS_KM = 50;
 
     private static final double _KM_PER_NM = 1.852;

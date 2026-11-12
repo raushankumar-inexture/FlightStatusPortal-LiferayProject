@@ -105,6 +105,23 @@ public class LiveApplication extends Application {
         }
     }
 
+    /** Track a flight by number (AI101, 6E606) or callsign (AIC101) anywhere in the world: the aircraft in the air right now. */
+    @GET
+    @Path("/track")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response track(@QueryParam("q") String query) {
+        if ((query == null) || !query.trim().matches("[0-9A-Za-z -]{3,10}")) {
+            return Response.status(400).entity("{\"error\":\"Type a flight number such as AI101 or 6E606\"}").build();
+        }
+
+        try {
+            return Response.ok(LiveTracker.track(query).toString()).build();
+        }
+        catch (Exception exception) {
+            return Response.status(502).entity("{\"error\":\"The live aircraft service did not answer. Try again in a moment.\"}").build();
+        }
+    }
+
     /** Where an airline flight comes from and goes to, for the Live Map. */
     @GET
     @Path("/route")
