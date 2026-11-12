@@ -329,7 +329,11 @@ class FlightStatusApp extends HTMLElement {
 			originAirportId: f.originAirportId,
 			destinationAirportId: f.destinationAirportId,
 			gateId: f.gateId,
-		})).sort((x, y) => String(x.departureTime).localeCompare(String(y.departureTime)));
+		})).sort((x, y) => {
+			// Flights from 6 hours ago onwards come first (soonest first); older flights come after (most recent first).
+			const limit = Date.now() - 6 * 3600000, a = (parseDate(x.departureTime) || 0).valueOf(), b = (parseDate(y.departureTime) || 0).valueOf();
+			return (a >= limit) !== (b >= limit) ? (a >= limit ? -1 : 1) : (a >= limit ? a - b : b - a);
+		});
 	}
 
 	async airports() {
@@ -391,7 +395,7 @@ class FlightStatusApp extends HTMLElement {
 		const crumbs = (!adminMode && crumbLabel && !['home', 'login', 'register'].includes(current))
 			? '<nav class="fa-crumbs" aria-label="Breadcrumb"><a href="' + root + '/home">Home</a><span>&rsaquo;</span><b>' + esc(crumbLabel) + '</b></nav>' : '';
 
-		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users'], ['gate', 'Gate scan', 'scan']];
+		const sideItems = [['dashboard', 'Dashboard', 'grid'], ['flights', 'Flights', 'plane'], ['airports', 'Airports', 'building'], ['gates', 'Gates', 'gate'], ['bookings', 'Bookings', 'ticket'], ['reservations', 'Reservations', 'users'], ['gate', 'Gate scan', 'scan'], ['track', 'Track flight', 'search']];
 		const sidebar = sidebarMode ? '<aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
 			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '';
 		this.classList.toggle('has-sidebar', sidebarMode);
@@ -618,10 +622,11 @@ class FlightStatusApp extends HTMLElement {
 
 	async view_live(view) {
 		view.innerHTML = '<div class="fa-title"><h1>Live Aircraft Tracking</h1><p>Real aircraft over India, from public ADS-B data. Updates every 20 seconds.</p></div>' +
-			'<div class="fa-stats fa-livestats" style="margin:0 0 1rem"></div>' +
+			'<div class="fa-trackslot"></div><div class="fa-stats fa-livestats" style="margin:0 0 1rem"></div>' +
 			'<form class="fa-livebar fa-citybar"><input class="fa-citysearch" placeholder="Flights over a city, e.g. Ahmedabad" /><button class="fa-btn" type="submit">Show flights</button><button class="fa-btn fa-btn-light fa-cityclear" type="button" hidden>Show full map</button></form>' +
 			'<div class="fa-livebar"><input class="fa-livesearch" placeholder="Find a callsign, e.g. AIC101 or IGO" /><span class="fa-livestate">Loading...</span></div>' +
 			'<div class="fa-map"></div><div class="fa-citylist"></div><p class="fa-credit">Aircraft data: <a href="https://adsb.fi" target="_blank" rel="noopener">adsb.fi</a> open data &middot; Routes: adsbdb.com &middot; Photos: Planespotters.net &middot; Map &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>';
+		this.bindTrack(view.querySelector('.fa-trackslot'));
 		await this.loadLeaflet();
 		const map = L.map(view.querySelector('.fa-map'), {zoomControl: true}).setView([22.5, 80], 5);
 		L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 12, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
@@ -895,6 +900,8 @@ class FlightStatusApp extends HTMLElement {
 						esc(o && d ? o.code + ' → ' + d.code : '?'), esc(CLASS_LABEL[classOf(b.travelClass)]),
 						'<span class="fa-badge ' + (b.bookingStatus === 'CheckedIn' ? 'landed' : b.bookingStatus === 'Cancelled' ? 'delayed' : 'ontime') + '">' + esc(b.bookingStatus === 'CheckedIn' ? 'Checked in' : b.bookingStatus) + '</span>']];
 				}));
+		} else if (tab === 'track') {
+			body = '<div class="fa-trackslot"></div><p class="fa-panelnote fa-trackquota"></p>';
 		} else if (tab === 'gate') {
 			body = '<div class="fa-head"><h2>Gate scan</h2></div><div class="fa-gate"><div class="fa-gatebar"><input class="fa-gatecode" placeholder="Scan the QR, or paste the link or code from the boarding pass" autocomplete="off" /><button class="fa-btn block-auto fa-gatego" type="button">Check pass</button><button class="fa-chip fa-gatecam" type="button">Use camera</button></div>' +
 				'<video class="fa-gatevideo" hidden playsinline muted></video><div class="fa-gateresult"><p class="fa-panelnote">Scan a boarding pass QR with the camera, or paste its link, to see the passenger and mark them as boarded.</p></div></div>';
@@ -939,6 +946,10 @@ class FlightStatusApp extends HTMLElement {
 		if (adminSearch[tab]) this.setupFilter(view, {key: 'admin-' + tab, items: '.fa-table tbody tr', placeholder: adminSearch[tab], table: true});
 		if (tab === 'reservations') this.bindReservations(view, reservations);
 		if (tab === 'gate') this.bindGate(view);
+		if (tab === 'track') {
+			this.bindTrack(view.querySelector('.fa-trackslot'));
+			fetch('/o/flight-feed/status', {credentials: 'include'}).then((r) => r.json()).then((st) => { view.querySelector('.fa-trackquota').textContent = st.enabled ? 'Flight data lookups used this month: ' + st.callsThisMonth + ' of ' + st.monthlyLimit + ' (shared with the daily sync). Live aircraft tracking has no limit.' : 'The flight data service is not connected. Live aircraft tracking still works.'; }).catch(() => {});
+		}
 		if (tab === 'dashboard') this.bindFeed(view);
 		view.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => this.adminForm(view, b.dataset.add, null, {airports, flights, gates, bookings})));
 		view.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
@@ -955,6 +966,76 @@ class FlightStatusApp extends HTMLElement {
 				await this.renderAdmin(view, tab, {error: true, text: 'Could not delete: ' + e.message + (tab === 'airports' ? ' (an airport used by flights cannot be deleted)' : '')});
 			}
 		}));
+	}
+
+	// "Track a flight": type any flight number, see the aircraft live on a map (anyone) and, when signed in, today's status, delay, terminal and gate.
+	async bindTrack(root) {
+		if (!root) return;
+		root.innerHTML = '<section class="fa-track"><h3>Track a flight</h3><p class="fa-hint">Type any flight number from any airport, for example AI101, 6E606 or EK512.</p>' +
+			'<form class="fa-trackform"><input name="q" placeholder="Flight number, e.g. AI101" autocomplete="off" maxlength="10" /><button class="fa-btn" type="submit">Track</button></form><div class="fa-trackout"></div></section>';
+		const form = root.querySelector('form'), out = root.querySelector('.fa-trackout');
+		const signedIn = Liferay.ThemeDisplay.isSignedIn();
+		const LABEL = {scheduled: 'Scheduled', active: 'In the air', landed: 'Landed', cancelled: 'Cancelled', incident: 'Incident', diverted: 'Diverted'};
+		const when = (iso) => (iso ? esc(fmtDate(iso) + ' ' + fmtTime(iso)) : '-');
+		let timer = null, map = null, marker = null, current = '';
+		const planeIcon = (a) => L.divIcon({className: 'fa-plane', iconSize: [30, 30], iconAnchor: [15, 15],
+			html: '<svg viewBox="0 0 24 24" width="30" height="30" style="transform:rotate(' + (Number(a.track) || 0) + 'deg)" fill="' + (a.onGround ? '#8a94a8' : '#0b5fff') + '" stroke="#fff" stroke-width="1"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>'});
+		const statusCard = (f) => {
+			const d = f.departure || {}, a = f.arrival || {}, delay = Number(d.delay) || 0;
+			return '<div class="fa-trackcard"><div class="fa-trackhead"><b>' + esc(f.flight) + '</b> <span>' + esc(f.airline) + '</span><i class="fa-badge ' + (f.status === 'active' ? 'departed' : f.status === 'landed' ? 'landed' : f.status === 'cancelled' ? 'delayed' : 'ontime') + '">' + esc(LABEL[f.status] || f.status) + '</i></div>' +
+				'<div class="fa-trackroute"><div><b>' + esc(d.iata) + '</b><span>' + esc(d.airport) + '</span></div><em>&rarr;</em><div><b>' + esc(a.iata) + '</b><span>' + esc(a.airport) + '</span></div></div>' +
+				'<dl class="fa-kv">' + [['Departs', when(d.scheduled)], ['Expected', when(d.estimated || d.scheduled)], ['Arrives', when(a.estimated || a.scheduled)], ['Delay', delay ? '+' + delay + ' min' : 'On time'],
+					['Departure terminal / gate', esc((d.terminal || '-') + ' / ' + (d.gate || '-'))], ['Arrival terminal / gate', esc((a.terminal || '-') + ' / ' + (a.gate || '-'))]].map((r) => '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('') + '</dl></div>';
+		};
+		const tiles = (a) => '<div class="fa-tracktiles">' + [['Altitude', a.onGround ? 'On the ground' : Number(a.altitude).toLocaleString() + ' ft'], ['Speed', a.speed + ' kt'], ['Heading', a.track + '\u00b0'], ['Position', Number(a.lat).toFixed(2) + ', ' + Number(a.lon).toFixed(2)], ['Aircraft', esc([a.type, a.registration].filter(Boolean).join(' \u00b7 ') || '-')]]
+			.map((t) => '<div><span>' + t[0] + '</span><b>' + t[1] + '</b></div>').join('') + '</div>';
+		const show = async (q) => {
+			current = q;
+			clearInterval(timer);
+			out.innerHTML = '<p class="fa-panelnote">Looking up ' + esc(q) + '...</p>';
+			const [live, full] = await Promise.all([
+				this.json('/o/flight-live/track?q=' + encodeURIComponent(q)).catch((e) => ({error: e.message, aircraft: []})),
+				signedIn ? fetch('/o/flight-feed/lookup?flight=' + encodeURIComponent(q), {credentials: 'include'}).then((r) => r.json()).catch(() => ({available: false, reason: 'The flight data service did not answer.'})) : Promise.resolve(null),
+			]);
+			const a = (live.aircraft || []).sort((x, y) => Number(x.onGround) - Number(y.onGround))[0];
+			let html = '';
+			if (full && full.available && full.flights && full.flights.length) html += full.flights.map(statusCard).join('');
+			else if (full && !full.available) html += '<p class="fa-panelnote">' + esc(full.reason || full.error || 'Full status is not available.') + '</p>';
+			else if (full && full.error) html += '<p class="fa-panelnote">' + esc(full.error) + '</p>';
+			else if (full) html += '<p class="fa-panelnote">No scheduled flight was found for ' + esc(q) + ' today.</p>';
+			else html += '<p class="fa-panelnote"><a href="' + this._root + '/login">Sign in</a> to see scheduled times, delay, terminal and gate.</p>';
+			if (live.error) html += '<p class="fa-panelnote">' + esc(live.error) + '</p>';
+			else if (a) html += '<div class="fa-trackcard"><div class="fa-trackhead"><b>' + esc(a.callsign) + '</b> <span>in the air now</span><i class="fa-badge departed">Live</i></div><p class="fa-trackroutetxt fa-panelnote"></p>' + tiles(a) + '<div class="fa-trackmap"></div><p class="fa-trackphoto"></p><p class="fa-credit">Aircraft position: adsb.fi open data, updated every 20 seconds.</p></div>';
+			else html += '<p class="fa-panelnote">No aircraft is broadcasting under ' + esc(q) + ' right now. The flight may not have left yet, may have landed, or may be outside radio coverage.</p>';
+			out.innerHTML = html;
+			if (!a || live.error) return;
+			await this.loadLeaflet();
+			const el = out.querySelector('.fa-trackmap');
+			if (!el) return;
+			map = L.map(el).setView([a.lat, a.lon], 6);
+			L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 12, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+			marker = L.marker([a.lat, a.lon], {icon: planeIcon(a)}).addTo(map);
+			this.json('/o/flight-live/route?callsign=' + encodeURIComponent(a.callsign)).then((r) => { const t = out.querySelector('.fa-trackroutetxt'); if (t && r && r.origin && r.destination) t.textContent = 'Route: ' + (r.origin.city || r.origin.name || '') + ' (' + r.origin.code + ') to ' + (r.destination.city || r.destination.name || '') + ' (' + r.destination.code + ')'; }).catch(() => {});
+			this.json('/o/flight-live/photo?hex=' + encodeURIComponent(a.hex)).then((p) => { const t = out.querySelector('.fa-trackphoto'); if (t && p && p.url) t.innerHTML = '<img src="' + esc(p.url) + '" alt="" style="max-width:260px;border-radius:8px">' + (p.credit ? '<small>' + esc(p.credit) + '</small>' : ''); }).catch(() => {});
+			timer = setInterval(async () => {
+				if (!root.isConnected || current !== q) return clearInterval(timer);
+				try {
+					const again = ((await this.json('/o/flight-live/track?q=' + encodeURIComponent(q))).aircraft || [])[0];
+					if (!again) return;
+					marker.setLatLng([again.lat, again.lon]).setIcon(planeIcon(again));
+					map.panTo([again.lat, again.lon]);
+					const old = out.querySelector('.fa-tracktiles');
+					if (old) old.outerHTML = tiles(again);
+				} catch (e) {}
+			}, 20000);
+		};
+		form.addEventListener('submit', (e) => {
+			e.preventDefault();
+			const q = form.q.value.trim();
+			if (q) show(q);
+		});
+		const preset = new URLSearchParams(location.search).get('track');
+		if (preset) { form.q.value = preset; show(preset); }
 	}
 
 	// Dashboard card for the real flight data feed: connected or not, last sync, calls used, and a Sync now button.
@@ -1552,9 +1633,11 @@ class FlightStatusApp extends HTMLElement {
 					kinds.map((k) => `<button class="fa-tab ${kind === k ? 'active' : ''}" data-k="${k}">${k} (${flights.filter((f) => kindOf(f, ap) === k).length})</button>`).join('') + '</div>' +
 					'<div class="fa-chips"><button class="fa-chip ' + (filter === 'all' ? 'active' : '') + '" data-f="all">All (' + flights.length + ')</button>' +
 					statuses.map((s) => `<button class="fa-chip ${filter === s ? 'active' : ''}" data-f="${esc(s)}">${esc(s)} (${flights.filter((f) => f.status === s).length})</button>`).join('') + '</div>' +
-					(hits.length ? hits.map((f) => this.flightRow(f, ap)).join('') : '<div class="fa-msg">No flights found.</div>') +
+					(hits.length ? hits.slice(0, this._showAll ? hits.length : 60).map((f) => this.flightRow(f, ap)).join('') + (!this._showAll && hits.length > 60 ? '<button class="fa-btn block-auto fa-showall" type="button">Show all ' + hits.length + ' flights</button>' : '') : '<div class="fa-msg">No flights found.</div>') +
 					'</div>' + this.sidePanel(flights, ap) + '</div>';
 				this.bindMiniMaps(view);
+				const more = view.querySelector('.fa-showall');
+				if (more) more.addEventListener('click', () => { this._showAll = true; draw(); });
 				view.querySelectorAll('.fa-tab').forEach((b) => b.addEventListener('click', () => {
 					kind = this._kind = b.dataset.k;
 					draw();

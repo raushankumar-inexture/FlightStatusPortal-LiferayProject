@@ -865,3 +865,25 @@ flight-status-app .fa-sumadd.total b { color: #ffc61a; }
 
 flight-status-app .fa-badge.feedtag { background: #e6eeff; color: #1146d6; font-size: .65rem; padding: .1rem .45rem; margin-left: .35rem; }
 flight-status-app .fa-feedcard p { margin: .35rem 0; }
+
+/* Track a flight */
+flight-status-app .fa-track { background: #fff; border: 1px solid var(--fa-line); border-radius: 14px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; box-shadow: 0 4px 14px rgba(15, 30, 80, .06); }
+flight-status-app .fa-track h3 { margin: 0 0 .3rem; color: #0f1e50; }
+flight-status-app .fa-trackform { display: flex; gap: .6rem; flex-wrap: wrap; margin: .6rem 0; }
+flight-status-app .fa-trackform input { flex: 1 1 260px; padding: .75rem 1rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: 1rem; text-transform: uppercase; }
+flight-status-app .fa-trackcard { border: 1px solid #e3e9f6; border-radius: 12px; padding: 1rem; margin-top: .8rem; background: #fbfcff; }
+flight-status-app .fa-trackhead { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+flight-status-app .fa-trackhead b { font-size: 1.15rem; color: #0f1e50; }
+flight-status-app .fa-trackhead span { color: #6b7790; }
+flight-status-app .fa-trackhead .fa-badge { margin-left: auto; }
+flight-status-app .fa-trackroute { display: flex; align-items: center; gap: 1rem; margin: .8rem 0; }
+flight-status-app .fa-trackroute div { display: grid; }
+flight-status-app .fa-trackroute b { font-size: 1.6rem; color: #0f1e50; }
+flight-status-app .fa-trackroute span { color: #6b7790; font-size: .8rem; }
+flight-status-app .fa-trackroute em { font-style: normal; color: #1146d6; font-size: 1.3rem; }
+flight-status-app .fa-tracktiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .6rem; margin: .8rem 0; }
+flight-status-app .fa-tracktiles div { display: grid; padding: .6rem .8rem; background: #fff; border: 1px solid #e3e9f6; border-radius: 10px; }
+flight-status-app .fa-tracktiles span { font-size: .7rem; text-transform: uppercase; color: #6b7790; }
+flight-status-app .fa-tracktiles b { color: #0f1e50; }
+flight-status-app .fa-trackmap { height: 320px; border-radius: 12px; overflow: hidden; }
+flight-status-app .fa-trackphoto small { display: block; color: #6b7790; font-size: .7rem; }
