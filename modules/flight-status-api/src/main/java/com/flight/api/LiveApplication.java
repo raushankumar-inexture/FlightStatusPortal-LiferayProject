@@ -283,6 +283,38 @@ public class LiveApplication extends Application {
         }
     }
 
+    /** The terminals of an airport, with their map position when the admin gave one. */
+    @GET
+    @Path("/terminals")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response terminals(@QueryParam("siteId") long siteId, @QueryParam("airport") String airport) {
+        try {
+            return Response.ok(
+                _rows(
+                    "C_AirportTerminal", siteId, v -> _text(v.get("airportCode")).equalsIgnoreCase(airport), "airportCode", "name", "latitude",
+                    "longitude").toString()).build();
+        }
+        catch (Exception exception) {
+            return Response.status(500).entity("{\"error\":\"Could not load the terminals\"}").build();
+        }
+    }
+
+    /** The pick-up points of an airport (per terminal), with the steps to reach them. */
+    @GET
+    @Path("/pickups")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response pickups(@QueryParam("siteId") long siteId, @QueryParam("airport") String airport) {
+        try {
+            return Response.ok(
+                _rows(
+                    "C_PickupPoint", siteId, v -> _text(v.get("airportCode")).equalsIgnoreCase(airport), "airportCode", "category", "terminal",
+                    "name", "steps", "latitude", "longitude").toString()).build();
+        }
+        catch (Exception exception) {
+            return Response.status(500).entity("{\"error\":\"Could not load the pick-up points\"}").build();
+        }
+    }
+
     /** The kinds of help a passenger can ask for (the admin edits this list). */
     @GET
     @Path("/assist-options")

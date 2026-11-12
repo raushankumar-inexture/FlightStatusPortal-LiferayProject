@@ -1031,3 +1031,13 @@ flight-status-app .fa-guideinfo .fa-btn { display: inline-block; margin-top: .5r
 	flight-status-app .fa-guidepanel { grid-template-columns: minmax(0, 1fr); padding: 1rem; }
 	flight-status-app .fa-guideimg { min-height: 12rem; }
 }
+
+/* Navigation on the guide page */
+flight-status-app .fa-terminalbar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: 1rem; }
+flight-status-app .fa-terminalbar span { font-weight: 700; margin-right: .3rem; }
+flight-status-app .fa-pickups { margin-bottom: 1.5rem; }
+flight-status-app .fa-pickup { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; margin-bottom: .75rem; background: #fff; border: 1px solid var(--fa-line); border-radius: 14px; }
+flight-status-app .fa-pickup ol { margin: .5rem 0 0; padding-left: 1.2rem; color: #44506e; line-height: 1.6; }
+flight-status-app .fa-pickup .fa-btn { text-decoration: none; }
+flight-status-app .fa-chip.small { padding: .1rem .6rem; font-size: .78rem; cursor: default; }
+flight-status-app .fa-guidemap { height: 24rem; margin-bottom: 1.5rem; border-radius: var(--fa-radius); overflow: hidden; border: 1px solid var(--fa-line); }
