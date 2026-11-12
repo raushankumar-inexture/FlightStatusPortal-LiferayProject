@@ -120,6 +120,116 @@ public class BoardingApplication extends Application {
         }
     }
 
+    /** The signed-in user's own assistance requests (wheelchair, help with luggage and so on). */
+    @GET
+    @Path("/assist")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response assistList(@Context HttpServletRequest request, @QueryParam("siteId") long siteId) {
+        try {
+            User user = _user(request);
+
+            if (user == null) {
+                return _error(401, "Please log in");
+            }
+
+            JSONArray out = JSONFactoryUtil.createJSONArray();
+
+            for (ObjectEntry entry : _entries("C_AssistanceRequest", siteId)) {
+                if (entry.getUserId() == user.getUserId()) {
+                    JSONObject json = JSONFactoryUtil.createJSONObject();
+
+                    json.put("id", entry.getObjectEntryId());
+
+                    for (String key : new String[] {"pnr", "assistanceType", "note", "requestStatus"}) {
+                        json.put(key, String.valueOf(entry.getValues().get(key)));
+                    }
+
+                    out.put(json);
+                }
+            }
+
+            return Response.ok(out.toString()).build();
+        }
+        catch (Exception exception) {
+            return _error(500, "Could not load your assistance requests");
+        }
+    }
+
+    /** Asks the airport for help on a boarding pass the signed-in user owns. Body: siteId, pnr, type, note. */
+    @Consumes(MediaType.APPLICATION_JSON)
+    @POST
+    @Path("/assist")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response assistCreate(@Context HttpServletRequest request, String body) {
+        try {
+            User user = _user(request);
+
+            if (user == null) {
+                return _error(401, "Please log in");
+            }
+
+            try {
+                AuthTokenUtil.checkCSRFToken(request, BoardingApplication.class.getName());
+            }
+            catch (PrincipalException principalException) {
+                return _error(403, "Please refresh the page and try again");
+            }
+
+            JSONObject input = JSONFactoryUtil.createJSONObject(body);
+
+            long siteId = input.getLong("siteId");
+            String pnr = input.getString("pnr").trim();
+            String type = input.getString("type").trim();
+            String note = input.getString("note").trim();
+
+            if ((type.length() < 2) || (type.length() > 60) || (note.length() > 200)) {
+                return _error(400, "Choose the kind of help. The note can be 200 letters at most.");
+            }
+
+            ObjectEntry pass = null;
+
+            for (ObjectEntry entry : _entries("C_BoardingPass", siteId)) {
+                if ((entry.getUserId() == user.getUserId()) && pnr.equalsIgnoreCase(String.valueOf(entry.getValues().get("pnr")))) {
+                    pass = entry;
+
+                    break;
+                }
+            }
+
+            if (pass == null) {
+                return _error(404, "You have no boarding pass with this booking code.");
+            }
+
+            for (ObjectEntry entry : _entries("C_AssistanceRequest", siteId)) {
+                Map<String, Serializable> v = entry.getValues();
+
+                if (pnr.equalsIgnoreCase(String.valueOf(v.get("pnr"))) && type.equalsIgnoreCase(String.valueOf(v.get("assistanceType"))) &&
+                    "Open".equals(String.valueOf(v.get("requestStatus")))) {
+
+                    return _error(409, "You already asked for this help. The airport team will contact you.");
+                }
+            }
+
+            Map<String, Serializable> values = new HashMap<>();
+
+            values.put("pnr", pnr.toUpperCase());
+            values.put("passengerName", String.valueOf(pass.getValues().get("passengerName")));
+            values.put("flightNumber", String.valueOf(pass.getValues().get("flightNumber")));
+            values.put("assistanceType", type);
+            values.put("note", note);
+            values.put("requestStatus", "Open");
+
+            _add("C_AssistanceRequest", siteId, user, values);
+
+            return Response.ok("{\"ok\":true}").build();
+        }
+        catch (Exception exception) {
+            _log.error("Could not save the assistance request", exception);
+
+            return _error(500, "Could not send your request");
+        }
+    }
+
     /** The signed-in user's own boarding passes. */
     @GET
     @Path("/passes")

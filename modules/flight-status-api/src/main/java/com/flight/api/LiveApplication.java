@@ -253,6 +253,75 @@ public class LiveApplication extends Application {
         }
     }
 
+    /** The notices the admin switched on, to show at the top of the pages. */
+    @GET
+    @Path("/notices")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response notices(@QueryParam("siteId") long siteId) {
+        try {
+            return Response.ok(
+                _rows("C_Notice", siteId, v -> Boolean.parseBoolean(_text(v.get("active"))), "message", "level").toString()).build();
+        }
+        catch (Exception exception) {
+            return Response.status(500).entity("{\"error\":\"Could not load notices\"}").build();
+        }
+    }
+
+    /** How to get to and from an airport (taxi, bus, metro, parking...), written by the admin. */
+    @GET
+    @Path("/guides")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response guides(@QueryParam("siteId") long siteId, @QueryParam("airport") String airport) {
+        try {
+            return Response.ok(
+                _rows(
+                    "C_AirportGuide", siteId, v -> _text(v.get("airportCode")).equalsIgnoreCase(airport), "airportCode", "category", "title",
+                    "details", "link", "imageUrl").toString()).build();
+        }
+        catch (Exception exception) {
+            return Response.status(500).entity("{\"error\":\"Could not load the airport guide\"}").build();
+        }
+    }
+
+    /** The kinds of help a passenger can ask for (the admin edits this list). */
+    @GET
+    @Path("/assist-options")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response assistOptions(@QueryParam("siteId") long siteId) {
+        try {
+            return Response.ok(_rows("C_AssistanceOption", siteId, v -> true, "name").toString()).build();
+        }
+        catch (Exception exception) {
+            return Response.status(500).entity("{\"error\":\"Could not load the help options\"}").build();
+        }
+    }
+
+    /** The entries of an object that pass the filter, with the listed fields as text. */
+    private JSONArray _rows(
+            String objectName, long siteId, java.util.function.Predicate<Map<String, Serializable>> keep, String... keys)
+        throws Exception {
+
+        JSONArray out = JSONFactoryUtil.createJSONArray();
+
+        for (ObjectEntry entry : _entries(objectName, siteId)) {
+            if (!keep.test(entry.getValues())) {
+                continue;
+            }
+
+            JSONObject row = JSONFactoryUtil.createJSONObject();
+
+            row.put("id", entry.getObjectEntryId());
+
+            for (String key : keys) {
+                row.put(key, _text(entry.getValues().get(key)));
+            }
+
+            out.put(row);
+        }
+
+        return out;
+    }
+
     private List<ObjectEntry> _entries(String objectName, long siteId) throws Exception {
         ObjectDefinition definition = _objectDefinitionLocalService.getObjectDefinition(
             PortalUtil.getDefaultCompanyId(), objectName);

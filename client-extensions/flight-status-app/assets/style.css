@@ -941,3 +941,65 @@ flight-status-app .fa-factions { display: flex; flex-wrap: wrap; gap: .6rem; ali
 	flight-status-app .fa-fmore { grid-column: 1 / -1; }
 	flight-status-app .fa-fcols { grid-template-columns: 1fr; }
 }
+
+/* Notices from the admin, airport guide and special assistance */
+flight-status-app .fa-alerts { max-width: 1440px; margin: 0 auto; padding: .75rem 1.75rem 0; display: flex; flex-direction: column; gap: .5rem; }
+flight-status-app .fa-alerts[hidden] { display: none; }
+flight-status-app .fa-alerts.first { padding-top: 5.6rem; }
+flight-status-app.has-notices .fa-view { padding-top: 1rem; }
+flight-status-app .fa-alertbar { display: flex; align-items: center; gap: .75rem; padding: .7rem 1rem; border-radius: 12px; background: #e8f0ff; color: #0f3a99; font-weight: 600; }
+flight-status-app .fa-alertbar.warning { background: #fff4d6; color: #7a5200; }
+flight-status-app .fa-alertbar.alert { background: #fde8e8; color: #b42318; }
+flight-status-app .fa-alertbar p { margin: 0; flex: 1; }
+flight-status-app .fa-alertbar button { border: 0; background: transparent; color: inherit; font-size: 1.4rem; line-height: 1; cursor: pointer; }
+flight-status-app .fa-getthere { align-self: flex-start; margin-top: .4rem; }
+flight-status-app .fa-guide { margin-top: .5rem; border-top: 1px solid var(--fa-line); padding-top: .5rem; }
+flight-status-app .fa-guide[hidden] { display: none; }
+flight-status-app .fa-guide h4 { margin: .6rem 0 .2rem; color: var(--fa-blue); }
+flight-status-app .fa-guiderow p { margin: .1rem 0 .2rem; color: #4a5574; white-space: pre-line; }
+flight-status-app .fa-guiderow a { color: var(--fa-blue); font-weight: 600; }
+flight-status-app .fa-assist { margin-top: 1rem; padding: 1rem 1.25rem; border: 1px solid var(--fa-line); border-radius: 14px; background: #fff; }
+flight-status-app .fa-assist h3 { margin: 0 0 .5rem; }
+flight-status-app .fa-assistrow { margin: .25rem 0; }
+flight-status-app .fa-assistform { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .6rem; }
+flight-status-app .fa-assistform select, flight-status-app .fa-assistform input { padding: .6rem .8rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: .95rem; }
+flight-status-app .fa-assistform input { flex: 1; min-width: 12rem; }
+flight-status-app .fa-authform textarea { padding: .75rem 1rem; border: 1px solid var(--fa-line); border-radius: 10px; font-size: 1rem; font-family: inherit; width: 100%; }
+flight-status-app .fa-authform label.fa-check { flex-direction: row; align-items: center; gap: .5rem; }
+flight-status-app .fa-authform label.fa-check input { width: auto; }
+
+/* Grouped menu, column footer and guide photo cards */
+flight-status-app .fa-drop { position: relative; }
+flight-status-app .fa-dropbtn { color: #c9d6f5; background: none; border: 0; padding: .5rem .7rem; border-radius: 10px; font: inherit; font-weight: 600; font-size: .92rem; cursor: pointer; white-space: nowrap; }
+flight-status-app .fa-dropbtn:hover, flight-status-app .fa-drop.open .fa-dropbtn { color: #fff; background: rgba(255,255,255,.1); }
+flight-status-app .fa-drop.active .fa-dropbtn { color: #fff; background: var(--fa-blue); }
+flight-status-app .fa-dropmenu { display: none; position: absolute; top: 100%; left: 0; min-width: 12rem; padding: .4rem; background: var(--fa-navy); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.3); flex-direction: column; z-index: 1001; }
+flight-status-app .fa-drop:hover .fa-dropmenu, flight-status-app .fa-drop:focus-within .fa-dropmenu, flight-status-app .fa-drop.open .fa-dropmenu { display: flex; }
+flight-status-app .fa-dropmenu a { padding: .55rem .8rem; }
+flight-status-app.has-bigfooter .fa-footer.fa-footbig { position: static; display: block; padding: 2.5rem 1.75rem 1rem; font-size: .92rem; }
+flight-status-app.has-bigfooter .fa-view { padding-bottom: 2rem; }
+flight-status-app .fa-footcols { display: flex; flex-wrap: wrap; gap: 2rem 3rem; max-width: 1440px; margin: 0 auto; }
+flight-status-app .fa-footbrand { flex: 1 1 16rem; }
+flight-status-app .fa-footbrand p { color: #aebbdc; max-width: 22rem; }
+flight-status-app .fa-footcol { display: flex; flex-direction: column; align-items: flex-start; gap: .45rem; min-width: 8rem; }
+flight-status-app .fa-footcol h4 { margin: 0 0 .3rem; color: #fff; font-size: .95rem; }
+flight-status-app .fa-footbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem 1.5rem; max-width: 1440px; margin: 2rem auto 0; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,.12); font-size: .82rem; }
+flight-status-app .fa-guidebox { max-width: 760px; width: 94vw; max-height: 88vh; display: flex; flex-direction: column; gap: 1rem; }
+flight-status-app .fa-guidebody { overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1rem; }
+flight-status-app .fa-guidecard { display: flex; flex-direction: column; border: 1px solid var(--fa-line); border-radius: 14px; overflow: hidden; background: #fff; }
+flight-status-app .fa-guidephoto { position: relative; height: 8rem; flex-shrink: 0; background: linear-gradient(135deg, #1c3a8a, #0b5fff); background-size: cover; background-position: center; }
+flight-status-app .fa-guidephoto .fa-code { position: absolute; left: .6rem; bottom: .6rem; }
+flight-status-app .fa-guidetext { padding: .8rem 1rem 1rem; }
+flight-status-app .fa-guidetext p { margin: .3rem 0; color: #4a5574; white-space: pre-line; }
+flight-status-app .fa-guidetext a { color: var(--fa-blue); font-weight: 600; }
+@media (max-width: 1240px) {
+	flight-status-app .fa-links { align-items: stretch; }
+	flight-status-app .fa-links a { text-align: left; }
+	flight-status-app .fa-drop { display: contents; }
+	flight-status-app .fa-dropmenu { align-self: stretch; }
+	flight-status-app .fa-dropbtn { text-align: left; width: 100%; padding: .5rem 1rem; }
+	flight-status-app .fa-dropmenu { position: static; display: none; border: 0; box-shadow: none; background: transparent; padding: 0 0 0 1rem; }
+	flight-status-app .fa-drop.open .fa-dropmenu { display: flex; }
+	flight-status-app .fa-drop:hover .fa-dropmenu { display: none; }
+	flight-status-app .fa-drop.open:hover .fa-dropmenu { display: flex; }
+}
