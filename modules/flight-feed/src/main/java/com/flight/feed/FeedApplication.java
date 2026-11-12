@@ -24,6 +24,7 @@ import jakarta.servlet.http.HttpSession;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Application;
@@ -47,7 +48,10 @@ import java.time.ZoneId;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -100,6 +104,20 @@ public class FeedApplication extends Application {
 
 	@Activate
 	protected void activate() {
+		try {
+			java.nio.file.Path last = Paths.get(PropsUtil.get(PropsKeys.LIFERAY_HOME), "data", "flight-feed-last.txt");
+
+			if (Files.exists(last)) {
+				String[] lines = Files.readString(last).split("\n", 2);
+
+				_lastRun = lines[0].trim();
+				_lastResult = (lines.length > 1) ? lines[1].trim() : _lastResult;
+			}
+		}
+		catch (Exception exception) {
+			_log.warn("Could not read the last feed run: " + exception.getMessage());
+		}
+
 		_scheduler = Executors.newSingleThreadScheduledExecutor(
 			runnable -> {
 				Thread thread = new Thread(runnable, "flight-feed");
@@ -152,6 +170,166 @@ public class FeedApplication extends Application {
 		out.put("airports", _setting("FEED_AIRPORTS") == null ? "" : _setting("FEED_AIRPORTS"));
 
 		return Response.ok(out.toString()).build();
+	}
+
+	private final Map<String, Object[]> _lookups = new ConcurrentHashMap<>();
+
+	private final Map<Long, long[]> _lookupHits = new ConcurrentHashMap<>();
+
+	/**
+	 * Status of any flight by number, from the provider: today's times, delay, terminal and gate. Signed-in users only,
+	 * about 20 lookups an hour each, answers are kept for 10 minutes, and it shares the monthly call limit of the sync.
+	 */
+	@GET
+	@Path("/lookup")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response lookup(@Context HttpServletRequest request, @QueryParam("flight") String flight) {
+		try {
+			User user = _user(request);
+
+			if (user == null) {
+				return _error(401, "Please sign in to see the full status of a flight");
+			}
+
+			String number = (flight == null) ? "" : flight.toUpperCase().replaceAll("[\\s-]", "");
+
+			if (!number.matches("[A-Z0-9]{2}\\d{1,4}[A-Z]?")) {
+				return _error(400, "Type a flight number such as AI101 or 6E606");
+			}
+
+			JSONObject out = JSONFactoryUtil.createJSONObject();
+
+			out.put("callsLeft", Math.max(0, _number(_setting("FEED_MONTHLY_LIMIT"), 90) - _usage()[0]));
+
+			if (!_enabled()) {
+				out.put("available", false);
+				out.put("reason", "The flight data service is not connected yet.");
+
+				return Response.ok(out.toString()).build();
+			}
+
+			Object[] hit = _lookups.get(number);
+
+			if ((hit != null) && ((System.currentTimeMillis() - (Long)hit[0]) < 600_000L)) {
+				return Response.ok((String)hit[1]).build();
+			}
+
+			long now = System.currentTimeMillis();
+			long[] hits = _lookupHits.compute(user.getUserId(), (id, old) -> ((old == null) || ((now - old[1]) > 3_600_000L)) ? new long[] {1, now} : new long[] {old[0] + 1, old[1]});
+
+			if (hits[0] > 20) {
+				return _error(429, "You have looked up many flights in the last hour. Please try again later.");
+			}
+
+			if (_usage()[0] >= _number(_setting("FEED_MONTHLY_LIMIT"), 90)) {
+				out.put("available", false);
+				out.put("reason", "This month's flight data lookups are used up. Live aircraft tracking still works.");
+
+				return Response.ok(out.toString()).build();
+			}
+
+			JSONObject answer = _get(_baseUrl() + "/flights?access_key=" + URLEncoder.encode(_setting("FEED_API_KEY"), "UTF-8") + "&limit=10&flight_iata=" + number);
+
+			_addCall();
+
+			if (answer.has("error")) {
+				out.put("available", false);
+				out.put("reason", "The flight data service said: " + answer.getJSONObject("error").getString("message"));
+
+				return Response.ok(out.toString()).build();
+			}
+
+			JSONArray data = answer.getJSONArray("data");
+			List<JSONObject> rows = new ArrayList<>();
+
+			for (int i = 0; (data != null) && (i < data.length()); i++) {
+				JSONObject f = data.getJSONObject(i);
+
+				if ((f.getJSONObject("flight") != null) && f.getJSONObject("flight").isNull("codeshared")) {
+					rows.add(f);
+				}
+			}
+
+			// the flights closest to now first: today's flight before last week's
+			long nowMillis = System.currentTimeMillis();
+
+			rows.sort((a, b) -> Long.compare(_distance(a, nowMillis), _distance(b, nowMillis)));
+
+			JSONArray flights = JSONFactoryUtil.createJSONArray();
+
+			for (int i = 0; (i < rows.size()) && (i < 3); i++) {
+				flights.put(_shape(rows.get(i)));
+			}
+
+			out.put("available", true);
+			out.put("flights", flights);
+			out.put("callsLeft", Math.max(0, _number(_setting("FEED_MONTHLY_LIMIT"), 90) - _usage()[0]));
+
+			_lookups.put(number, new Object[] {System.currentTimeMillis(), out.toString()});
+
+			return Response.ok(out.toString()).build();
+		}
+		catch (Exception exception) {
+			_log.error("Flight lookup failed", exception);
+
+			return _error(502, "The flight data service did not answer. Try again in a moment.");
+		}
+	}
+
+	private static long _distance(JSONObject f, long now) {
+		Date d = _time(f.getJSONObject("departure"), "scheduled");
+
+		return (d == null) ? Long.MAX_VALUE : Math.abs(d.getTime() - now);
+	}
+
+	private static JSONObject _shape(JSONObject f) {
+		JSONObject out = JSONFactoryUtil.createJSONObject();
+
+		out.put("flight", f.getJSONObject("flight").getString("iata"));
+		out.put("airline", f.getJSONObject("airline") == null ? "" : f.getJSONObject("airline").getString("name"));
+		out.put("status", f.getString("flight_status"));
+		out.put("date", f.getString("flight_date"));
+		out.put("departure", _part(f.getJSONObject("departure")));
+		out.put("arrival", _part(f.getJSONObject("arrival")));
+
+		return out;
+	}
+
+	private static JSONObject _part(JSONObject p) {
+		JSONObject out = JSONFactoryUtil.createJSONObject();
+
+		if (p == null) {
+			return out;
+		}
+
+		out.put("iata", p.getString("iata"));
+		out.put("airport", p.getString("airport"));
+		out.put("terminal", p.getString("terminal"));
+		out.put("gate", p.getString("gate"));
+		out.put("delay", Math.max(p.getInt("delay"), 0));
+
+		for (String key : new String[] {"scheduled", "estimated", "actual"}) {
+			Date d = _time(p, key);
+
+			out.put(key, (d == null) ? "" : Instant.ofEpochMilli(d.getTime()).toString());
+		}
+
+		return out;
+	}
+
+	private static User _user(HttpServletRequest request) {
+		try {
+			HttpSession session = PortalSessionContext.get(request.getSession().getId());
+
+			Object userId = (session == null) ? null : session.getAttribute("USER_ID");
+
+			User user = (userId == null) ? null : UserLocalServiceUtil.fetchUser(Long.parseLong(String.valueOf(userId)));
+
+			return ((user != null) && !user.isGuestUser() && user.isActive()) ? user : null;
+		}
+		catch (Exception exception) {
+			return null;
+		}
 	}
 
 	/** "Sync now" button on the admin dashboard. */
@@ -251,6 +429,13 @@ public class FeedApplication extends Application {
 
 			_log.info("Flight feed: " + _lastResult);
 
+			try {
+				Files.writeString(Paths.get(PropsUtil.get(PropsKeys.LIFERAY_HOME), "data", "flight-feed-last.txt"), _lastRun + "\n" + _lastResult);
+			}
+			catch (Exception exception) {
+				_log.warn("Could not save the last feed run: " + exception.getMessage());
+			}
+
 			return "{\"result\":\"" + _lastResult.replace("\"", "'") + "\"}";
 		}
 	}
@@ -261,6 +446,11 @@ public class FeedApplication extends Application {
 		JSONObject dep = f.getJSONObject("departure"), arr = f.getJSONObject("arrival");
 
 		if (number.isEmpty() || (dep == null) || (arr == null) || !airports.containsKey(dep.getString("iata")) || !airports.containsKey(arr.getString("iata"))) {
+			return 0;
+		}
+
+		// A codeshare is the same plane sold under another airline's number: keep only the operating flight.
+		if (!f.getJSONObject("flight").isNull("codeshared")) {
 			return 0;
 		}
 
@@ -303,7 +493,8 @@ public class FeedApplication extends Application {
 		for (ObjectEntry existing : _objectEntryLocalService.getObjectEntries(_SITE_ID, definition.getObjectDefinitionId(), 0, 1000)) {
 			Map<String, Serializable> v = existing.getValues();
 
-			if (number.equals(String.valueOf(v.get("flightNumber"))) && (v.get("departureTime") instanceof Date) && day.equals(_day((Date)v.get("departureTime")))) {
+			if (number.equals(String.valueOf(v.get("flightNumber"))) && (v.get("departureTime") instanceof Date) && day.equals(_day((Date)v.get("departureTime"))) &&
+				String.valueOf(airports.get(dep.getString("iata"))).equals(String.valueOf(v.get("r_originAirport_c_airportId")))) {
 				if (!"feed".equals(String.valueOf(v.get("source")))) {
 					return 0;
 				}
