@@ -769,7 +769,7 @@ flight-status-app .fa-sidebar a { display: flex; align-items: center; gap: .7rem
 flight-status-app .fa-sidebar a:hover { background: #eef3ff; color: #0f1e50; }
 flight-status-app .fa-sidebar a.active { background: #1146d6; color: #fff; }
 flight-status-app .fa-sidebar .fa-sideout { margin-top: .6rem; border-top: 1px solid #e3e9f6; border-radius: 0 0 10px 10px; padding-top: 1rem; color: #1146d6; }
-flight-status-app .fa-dashtiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: .75rem; margin: 1rem 0 1.25rem; }
+flight-status-app .fa-dashtiles { display: grid; grid-template-columns: repeat(7, 1fr); gap: .75rem; margin: 1rem 0 1.25rem; }
 flight-status-app .fa-dashtiles .fa-stat { padding: .9rem; }
 flight-status-app .fa-dashgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 flight-status-app .fa-dashcard { background: #fff; border: 1px solid var(--fa-line); border-radius: 14px; padding: 1.1rem 1.25rem; box-shadow: 0 4px 14px rgba(15, 30, 80, .06); }
@@ -1003,3 +1003,17 @@ flight-status-app .fa-guidetext a { color: var(--fa-blue); font-weight: 600; }
 	flight-status-app .fa-drop:hover .fa-dropmenu { display: none; }
 	flight-status-app .fa-drop.open:hover .fa-dropmenu { display: flex; }
 }
+
+/* Need help? shortcuts on the Home page */
+flight-status-app .fa-helpgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+flight-status-app .fa-helpcard { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; background: #fff; border-radius: var(--fa-radius); box-shadow: var(--fa-shadow); color: inherit; transition: transform .15s; }
+flight-status-app .fa-helpcard:hover { transform: translateY(-2px); }
+flight-status-app .fa-helpcard div { display: flex; flex-direction: column; }
+flight-status-app .fa-helpcard span:not(.fa-ico) { color: #6b7790; font-size: .88rem; }
+
+/* Quick access: counts, help button */
+flight-status-app .fa-count { margin-left: auto; min-width: 1.4rem; padding: 0 .45rem; border-radius: 999px; background: #d64545; color: #fff; font-size: .75rem; font-style: normal; font-weight: 700; text-align: center; line-height: 1.4rem; }
+flight-status-app a.fa-stat { color: inherit; transition: transform .15s; }
+flight-status-app a.fa-stat:hover { transform: translateY(-2px); }
+flight-status-app .fa-fshead .fa-getthere { margin-left: auto; }
+flight-status-app .fa-pass-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }

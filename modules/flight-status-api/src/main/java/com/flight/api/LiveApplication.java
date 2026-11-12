@@ -275,7 +275,7 @@ public class LiveApplication extends Application {
         try {
             return Response.ok(
                 _rows(
-                    "C_AirportGuide", siteId, v -> _text(v.get("airportCode")).equalsIgnoreCase(airport), "airportCode", "category", "title",
+                    "C_AirportGuide", siteId, v -> (airport == null) || airport.isBlank() || _text(v.get("airportCode")).equalsIgnoreCase(airport), "airportCode", "category", "title",
                     "details", "link", "imageUrl").toString()).build();
         }
         catch (Exception exception) {
