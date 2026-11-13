@@ -1,5 +1,3 @@
-import "./components.js";
-
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const getFetch = () => (window.Liferay && Liferay.Util && Liferay.Util.fetch ? Liferay.Util.fetch : fetch);
 const SITE_ID = () => Liferay.ThemeDisplay.getScopeGroupId();
@@ -367,6 +365,7 @@ class FlightStatusApp extends HTMLElement {
 		const q = params.get('q') || '';
 
 		const admin = await this.isAdmin();
+		this._isAdmin = admin;
 		let viewingSite = false;
 		try {
 			if (params.get('viewsite') === '1') sessionStorage.setItem('faViewSite', '1');
@@ -397,7 +396,7 @@ class FlightStatusApp extends HTMLElement {
 				.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${current === 'admin' && tab === t[0] ? 'active' : ''}">${t[1]}</a>`).join('') +
 				`<a href="${root}/live-map" class="${current === 'live' ? 'active' : ''}">Live Map</a>` +
 				`<a class="fa-auth" href="${root}/home?viewsite=1">View site</a>`
-			: this.navLinks(root, current) + (admin ? `<a class="fa-auth" href="${root}/admin">Admin</a>` : '');
+			: this.navLinks(root, current);
 
 		const crumbLabel = (ROUTES.find((r) => r.path === current) || {}).label;
 		const crumbs = (!adminMode && crumbLabel && !['home', 'login', 'register'].includes(current))
@@ -427,7 +426,10 @@ class FlightStatusApp extends HTMLElement {
 		this.classList.toggle('has-crumbs', !!crumbs);
 		this.loadNotices();
 
-		this.querySelector('.fa-burger').addEventListener('click', () => this.querySelector('.fa-links').classList.toggle('open'));
+		this.querySelector('.fa-burger').addEventListener('click', (e) => {
+			const open = this.querySelector('.fa-nav-links').classList.toggle('fa-nav-links--open');
+			e.currentTarget.setAttribute('aria-expanded', String(open));
+		});
 		this.bindShell();
 
 		const view = this.querySelector('.fa-view');
@@ -573,7 +575,7 @@ class FlightStatusApp extends HTMLElement {
 	helpMenu(root, routes, current) {
 		const helps = ROUTES.filter((r) => r.help);
 		if (!helps.length) return '';
-		return `<div class="fa-drop ${helps.some((r) => r.path === current) ? 'active' : ''}"><button type="button" class="fa-dropbtn" aria-haspopup="true">Help <span>&#9662;</span></button><div class="fa-dropmenu">${helps.map((r) => `<a href="${root}/${r.slug}">${esc(r.help[0])}</a>`).join('')}</div></div>`;
+		return `<div class="fa-drop ${helps.some((r) => r.path === current && !r.group) ? 'active' : ''}"><button type="button" class="fa-dropbtn" aria-haspopup="true">Help <span>&#9662;</span></button><div class="fa-dropmenu">${helps.map((r) => `<a href="${root}/${r.slug}">${esc(r.help[0])}</a>`).join('')}</div></div>`;
 	}
 
 	legalLinks() {
@@ -1440,7 +1442,7 @@ class FlightStatusApp extends HTMLElement {
 		const t = Liferay.ThemeDisplay;
 		if (t.isSignedIn()) {
 			const name = t.getUserName() || 'Account';
-			const items = ROUTES.filter((r) => r.menu && r.auth).map((r) => `<a href="${root}/${r.slug}" class="fa-nav-link ${r.path === current ? 'active' : ''}">${r.label}</a>`).join('');
+			const items = ROUTES.filter((r) => r.menu && r.auth).map((r) => `<a href="${root}/${r.slug}" class="fa-nav-link ${r.path === current ? 'active' : ''}">${r.label}</a>`).join('') + (this._isAdmin ? `<a href="${root}/admin" class="fa-nav-link">Admin portal</a>` : '');
 			return '<div class="fa-bellwrap"><button type="button" class="fa-bell" aria-label="Notifications">' + ICONS.bell + '<span class="fa-bellcount" hidden></span></button><div class="fa-notes" hidden></div></div>' +
 				'<div class="fa-usermenu"><button type="button" class="fa-userbtn" aria-haspopup="true" aria-expanded="false"><span class="fa-avatar">' + esc(name.trim().charAt(0).toUpperCase()) + '</span><span class="fa-uname">' + esc(name) + '</span><span class="fa-caret">&#9662;</span></button>' +
 				'<div class="fa-usermenu-list" hidden><div class="fa-umhead">Signed in as<b>' + esc(name) + '</b></div>' + items +
@@ -1689,24 +1691,26 @@ class FlightStatusApp extends HTMLElement {
 			'<section class="fa-herox" data-hero="1" title="Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons" data-photo-overlay="linear-gradient(180deg, rgba(8,18,50,.30) 0%, rgba(8,18,50,.55) 55%, rgba(8,18,50,.86) 100%)">' +
 			'<div class="fa-herox-in"><span class="fa-pill">&#9679; Live flight tracking</span><h1>Know where your flight is, <em>before you leave</em></h1>' +
 			'<p>Live departures, arrivals, gates and delays across every airport we cover, plus real aircraft on the map.</p>' +
-			'</div></section>' +
+			'</div><div class="fa-heropanel"><div><b data-live="air">-</b><span>Aircraft in the air now</span></div><div><b data-lbcount>-</b><span>Airports with live boards</span></div><div><b>20s</b><span>Aircraft position refresh</span></div></div></section>' +
 			'<section class="fa-searchcard"><div class="fa-stabs"><button type="button" class="active" data-t="num">Flight number</button><button type="button" data-t="route">Route &amp; date</button><button type="button" data-t="board">Airport board</button></div>' +
 			'<form class="fa-sform" data-p="num"><input name="q" placeholder="Flight number, airline or city, e.g. AI101 or IndiGo" /><button class="fa-btn" type="submit">Search flight</button></form>' +
 			'<form class="fa-sform" data-p="route" hidden><label>From<select name="from">' + airportOpts('') + '</select></label><label>To<select name="to">' + airportOpts('') + '</select></label><label>Date<input type="date" name="date" /></label><button class="fa-btn" type="submit">Search flights</button></form>' +
 			'<form class="fa-sform" data-p="board" hidden><label>Airport<select name="airport">' + Object.values(ap).sort((x, y) => x.city.localeCompare(y.city)).map((a) => `<option value="${esc(a.code)}">${esc(a.city)} (${esc(a.code)}) - ${esc(a.name)}</option>`).join('') + '</select></label><button class="fa-btn" type="submit">Open board</button></form>' +
 			(routes.length ? '<div class="fa-poproutes"><span>Popular routes</span>' + routes.map((f) => `<a href="${r}/search?from=${esc(f.originAirportId)}&to=${esc(f.destinationAirportId)}">${esc((ap[f.originAirportId] || {}).code || '?')} &rarr; ${esc((ap[f.destinationAirportId] || {}).code || '?')}</a>`).join('') + '</div>' : '') + '</section>' +
-			this.statTiles(this.stats(flights, ap)) + this.helpRow(r) +
+			this.statTiles(this.stats(flights, ap)) +
+			'<div class="fa-homegrid"><section class="fa-section fa-liveboard"><div class="fa-head"><div><span class="fa-eyebrow">Live from the airports</span><h2>Arrivals and departures right now</h2></div><a class="fa-headlink" href="' + r + '/flight-status">Open the full boards &rarr;</a></div>' +
+			'<div class="fa-lbtabs" role="tablist"></div><div class="fa-lbbody"><div class="fa-skel"><i></i><i></i><i></i></div></div></section>' + this.helpRow(r) +
 			'<section class="fa-checkin"><div class="fa-ck-text"><span class="fa-pill dark">Online check-in</span><h2>Check in and get your boarding pass</h2><p>Enter the booking code (PNR) and last name from your ticket. Check-in is free, and you can choose your own seat before the flight lands.</p></div>' +
 			'<form class="fa-ckform"><input name="pnr" placeholder="PNR / booking code" autocomplete="off" maxlength="12" /><input name="last" placeholder="Last name" autocomplete="off" maxlength="40" /><button class="fa-btn" type="submit" disabled>Check in</button><small>' + (Liferay.ThemeDisplay.isSignedIn() ? 'Your booking code is on your ticket.' : 'You will be asked to sign in first.') + '</small></form></section>' +
 			'<section class="fa-live fa-reveal"><div class="fa-live-text"><span class="fa-pill dark"><i class="fa-dot"></i> Live now</span><h2>Aircraft flying over India right now</h2><p>Real positions from open ADS-B data, refreshed every 20 seconds. Open the full map and click any plane to see where it is going, with its photo.</p>' +
-			'<div class="fa-livestats"><div><b data-live="air">-</b><span>In the air</span></div><div><b data-live="alt">-</b><span>Average altitude</span></div><div><b data-live="ground">-</b><span>On the ground</span></div></div><a class="fa-btn" href="' + r + '/live-map">Open the live map</a></div><div class="fa-minimap tall"></div></section>' +
-			['Domestic', 'International'].map((k) => {
+			'<div class="fa-livestats"><div><b data-live="air">-</b><span>In the air</span></div><div><b data-live="alt">-</b><span>Average altitude</span></div><div><b data-live="ground">-</b><span>On the ground</span></div></div><a class="fa-btn" href="' + r + '/live-map">Open the live map</a></div><div class="fa-minimap tall"></div></section></div>' +
+			'<div class="fa-twocol">' + ['Domestic', 'International'].map((k) => {
 				const hits = flights.filter((f) => kindOf(f, ap) === k).slice(0, 3);
 				return '<section class="fa-section"><div class="fa-head"><h2>' + k + ' flights</h2><a href="' + r + '/flight-status">View all &rarr;</a></div>' +
 					(hits.length ? hits.map((f) => this.flightRow(f, ap)).join('') : '<div class="fa-msg">No ' + k.toLowerCase() + ' flights found.</div>') + '</section>';
-			}).join('') +
+			}).join('') + '</div>' +
 			'<section class="fa-section fa-reveal"><div class="fa-head"><h2>Popular destinations</h2><a href="' + r + '/airports">All airports &rarr;</a></div><div class="fa-destgrid">' +
-			served.slice(0, 6).map((a) => {
+			served.slice(0, 12).map((a) => {
 				const n = flights.filter((f) => f.originAirportId == a.id || f.destinationAirportId == a.id).length;
 				return `<a class="fa-dest" href="${r}/airport-board?airport=${esc(a.code)}" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}" data-photo-overlay="linear-gradient(180deg, rgba(8,18,50,.05) 30%, rgba(8,18,50,.85))"><span class="fa-destcount">${n} flight${n === 1 ? '' : 's'}</span><b>${esc(a.city)}</b><small>${esc(a.country)} &middot; ${esc(a.code)}</small></a>`;
 			}).join('') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p></section>' +
@@ -1719,6 +1723,7 @@ class FlightStatusApp extends HTMLElement {
 			'<a class="fa-btn" href="' + r + '/search">Search flights</a></section>';
  		fillAllPhotos(view);
 		this.bindMiniMaps(view);
+		this.bindLiveBoard(view, ap);
 		const ck = view.querySelector('.fa-ckform');
 		ck.addEventListener('input', () => { ck.querySelector('button').disabled = !(ck.pnr.value.trim() && ck.last.value.trim()); });
 		ck.addEventListener('submit', (e) => {
@@ -1745,6 +1750,44 @@ class FlightStatusApp extends HTMLElement {
 		});
 	}
 
+	// Home page: the airports whose own board we read, with the arrivals or departures around now. A tab for each airport.
+	async bindLiveBoard(view, ap) {
+		const box = view.querySelector('.fa-liveboard');
+		if (!box) return;
+		const tabs = box.querySelector('.fa-lbtabs'), body = box.querySelector('.fa-lbbody');
+		let boards = [];
+		try { boards = await this.json('/o/flight-live/boards?siteId=' + SITE_ID()); } catch (e) {}
+		view.querySelectorAll('[data-lbcount]').forEach((e) => { e.textContent = boards.length; });
+		if (!boards.length) { box.hidden = true; return; }
+		const city = (code) => (Object.values(ap).find((a) => a.code === code) || {}).city || code;
+		const st = this._lb = this._lb || {code: '', dir: 'A'};
+		if (!boards.some((b) => b.airportCode === st.code)) st.code = boards.some((b) => b.airportCode === 'AMD') ? 'AMD' : boards[0].airportCode;
+		const draw = async () => {
+			tabs.innerHTML = boards.map((b) => `<button type="button" role="tab" class="fa-lbtab ${b.airportCode === st.code ? 'active' : ''}" data-c="${esc(b.airportCode)}"><b>${esc(b.airportCode)}</b><span>${esc(city(b.airportCode))}</span></button>`).join('') +
+				'<span class="fa-lbdir"><button type="button" class="' + (st.dir === 'A' ? 'active' : '') + '" data-d="A">Arrivals</button><button type="button" class="' + (st.dir === 'D' ? 'active' : '') + '" data-d="D">Departures</button></span>';
+			const from = new Date(new Date().toLocaleDateString('en-CA') + 'T00:00:00').getTime();
+			let rows = [];
+			try { rows = await this.json('/o/flight-live/board?siteId=' + SITE_ID() + '&airport=' + st.code + '&dir=' + st.dir + '&from=' + from + '&to=' + (from + 86400000)); } catch (e) {}
+			const when = (r) => Date.parse(r.estimated || r.scheduled) || 0;
+			const now = Date.now(), sorted = rows.slice().sort((a, b) => when(a) - when(b)), recent = sorted.filter((r) => when(r) < now).slice(-3).concat(sorted.filter((r) => when(r) >= now).slice(0, 5));
+			const label = (r) => {
+				const t = String(r.statusText).toLowerCase();
+				if (t.includes('cancel')) return ['Cancelled', 'cancelled'];
+				if (t.includes('delay')) return ['Delayed', 'delayed'];
+				if (st.dir === 'A') return (t.includes('arrived') || t.includes('baggage')) ? ['Arrived', 'landed'] : ['Expected', 'ontime'];
+				return t.includes('depart') ? ['Departed', 'departed'] : /board|final|gate|check|security/.test(t) ? ['Boarding', 'boarding'] : ['Scheduled', 'ontime'];
+			};
+			body.innerHTML = '<div class="fa-lbrows">' + (recent.length ? recent.map((r) => { const l = label(r); return `<div class="fa-lbrow"><time>${fmtTime(r.estimated || r.scheduled)}</time><span class="fa-lbfl"><b>${esc(r.flightNumber)}</b><small>${esc(r.airline)}</small></span><span class="fa-lbto"><b>${esc(r.otherCode)}</b><small>${esc(r.otherCity)}</small></span><span class="fa-lbterm">${r.terminal ? 'T' + esc(r.terminal) : ''}</span><i class="fa-badge ${l[1]}">${l[0]}</i></div>`; }).join('') : '<p class="fa-panelnote">No more flights on this board today.</p>') +
+				'</div><a class="fa-btn block-auto" href="' + this._root + '/flight-status?airport=' + encodeURIComponent(st.code) + '&dir=' + (st.dir === 'A' ? 'arr' : 'dep') + '">View the full ' + esc(city(st.code)) + ' board</a>';
+		};
+		tabs.addEventListener('click', (e) => {
+			const c = e.target.closest('[data-c]'), d = e.target.closest('[data-d]');
+			if (c) st.code = c.dataset.c; else if (d) st.dir = d.dataset.d; else return;
+			draw();
+		});
+		draw();
+	}
+
 	// Flight Status: a search card (Flight No. / Route / Airport) and an airport board whose rows open to show the details of a flight.
 	async view_flights(view) {
 		await this.loadFlightAlerts();
@@ -1764,6 +1807,8 @@ class FlightStatusApp extends HTMLElement {
 		const bap = {}, boardCache = {};
 		const airportOf = (id) => ap[id] || bap[id] || {};
 		const airports = Object.values(ap).sort((a, b) => String(a.city).localeCompare(String(b.city)));
+		const wanted = new URLSearchParams(location.search), wantedAirport = wanted.get('airport') && Object.values(ap).find((a) => a.code === wanted.get('airport').toUpperCase());
+		if (wantedAirport) { st.tab = 'airport'; st.airport = String(wantedAirport.id); st.dir = wanted.get('dir') === 'dep' ? 'dep' : 'arr'; st.date = todayKey; st.terminal = ''; st.airline = ''; }
 		if (!st.airport || !ap[st.airport]) {
 			const counts = {};
 			flights.forEach((f) => { counts[f.originAirportId] = (counts[f.originAirportId] || 0) + 1; });
@@ -1863,11 +1908,13 @@ class FlightStatusApp extends HTMLElement {
 		const row = (f) => {
 			const o = airportOf(f.originAirportId), d = airportOf(f.destinationAirportId), s = status(f), air = st.tab === 'airport', open = st.open.has(String(f.id));
 			const other = air ? (arrivals() ? o : d) : null, time = arrivals() ? (f.arrivalTime || f.departureTime) : f.departureTime;
-			return '<div class="fa-frow' + (open ? ' open' : '') + '"><button type="button" class="fa-fhead" data-id="' + esc(f.id) + '" aria-expanded="' + open + '">' +
+			const term = arrivals() ? f.arrTerminal : f.depTerminal, spot = arrivals() ? (f.belt ? 'Belt ' + f.belt : (f.arrGate ? 'Gate ' + f.arrGate : '')) : (f.depGate ? 'Gate ' + f.depGate : '');
+			const place = air ? '<span class="fa-fplace"><b>' + (term ? 'T' + esc(term) : '&mdash;') + '</b><small>' + esc(spot) + '</small></span>' : '';
+			return '<div class="fa-frow' + (open ? ' open' : '') + '"><button type="button" class="fa-fhead' + (air ? ' fa-fhead--air' : '') + '" data-id="' + esc(f.id) + '" aria-expanded="' + open + '">' +
 				'<span class="fa-fair">' + (logoHtml(f.flightNumber, f.airline) || '') + '<span><b>' + esc(airlineOf(f.flightNumber, f.airline) || '') + '</b><small>' + esc(f.flightNumber) + '</small></span></span>' +
 				'<span class="fa-fto"><b>' + esc(air ? (other.code || '?') : (o.code || '?') + ' → ' + (d.code || '?')) + '</b><small>' + esc(air ? (other.city || '') : (o.city || '') + ' to ' + (d.city || '')) + '</small></span>' +
 				'<span class="fa-ftime"><b>' + fmtTime(time) + '</b>' + (f.source === 'board' && (arrivals() ? f.scheduledArrival : f.scheduledDeparture) && fmtTime(arrivals() ? f.scheduledArrival : f.scheduledDeparture) !== fmtTime(time) ? '<small>Sched ' + fmtTime(arrivals() ? f.scheduledArrival : f.scheduledDeparture) + '</small>' : '') + (f.source !== 'board' && f.scheduledDeparture && !arrivals() && fmtTime(f.scheduledDeparture) !== fmtTime(f.departureTime) ? '<small>Sched ' + fmtTime(f.scheduledDeparture) + '</small>' : '') + '</span>' +
-				'<span class="fa-fstat"><i class="fa-badge ' + s.cls + '">' + esc(s.label) + '</i>' + (s.note ? '<small class="' + s.cls + '">' + esc(s.note) + '</small>' : '') + '</span>' +
+				place + '<span class="fa-fstat"><i class="fa-badge ' + s.cls + '">' + esc(s.label) + '</i>' + (s.note ? '<small class="' + s.cls + '">' + esc(s.note) + '</small>' : '') + '</span>' +
 				'<span class="fa-fmore">' + (open ? 'Hide details' : 'View details') + '</span></button>' + (open ? details(f, o, d, s) : '') + '</div>';
 		};
 
@@ -1890,7 +1937,7 @@ class FlightStatusApp extends HTMLElement {
 			if (st.tab === 'flight') { box.innerHTML = ''; return; }
 			const list = results();
 			box.innerHTML = '<div class="fa-fshead"><h2>' + (st.tab === 'airport' ? esc(airportOf(st.airport).city || 'Airport') + ' ' + (arrivals() ? 'arrivals' : 'departures') : 'Flights on this route') + '</h2><span>' + list.length + ' flight' + (list.length === 1 ? '' : 's') + ' on ' + esc(fmtDate(st.date + 'T12:00:00')) + '</span>' + (st.tab === 'airport' ? this.guideButton(ap[st.airport], guides, 'To and from this airport') : '') + '</div>' +
-				(boardRows() ? '<p class="fa-panelnote">Live from the airport\'s own arrivals and departures board.</p>' : '') + (list.length ? list.map(row).join('') : '<div class="fa-msg">No flights found for this day. Try another day or airport. Our live data covers only some flights each day.</div>');
+				(boardRows() ? '<p class="fa-panelnote">Live from the airport\'s own arrivals and departures board.</p>' : '') + (list.length && st.tab === 'airport' ? '<div class="fa-fthead fa-fthead--air" aria-hidden="true"><span>Airline</span><span>' + (arrivals() ? 'From' : 'To') + '</span><span>' + (arrivals() ? 'Arrival' : 'Departure') + '</span><span>' + (arrivals() ? 'Terminal / belt' : 'Terminal / gate') + '</span><span>Status</span><span></span></div>' : '') + (list.length ? list.map(row).join('') : '<div class="fa-msg">No flights found for this day. Try another day or airport. Our live data covers only some flights each day.</div>');
 			box.querySelectorAll('.fa-fhead').forEach((b) => b.addEventListener('click', () => { st.open.has(b.dataset.id) ? st.open.delete(b.dataset.id) : st.open.add(b.dataset.id); drawResults(); }));
 			box.querySelectorAll('[data-track]').forEach((b) => b.addEventListener('click', () => { st.tab = 'flight'; st.track = b.dataset.track; drawPane(); window.scrollTo({top: 0, behavior: 'smooth'}); }));
 			fillWeather();
@@ -2168,8 +2215,7 @@ class FlightStatusApp extends HTMLElement {
 		const url = () => history.replaceState(null, '', location.pathname + '?airport=' + encodeURIComponent(code) + '&tab=' + encodeURIComponent(tab) + (terminal ? '&terminal=' + encodeURIComponent(terminal) : ''));
 		view.innerHTML = `<div class="fa-title"><h1>To and from ${esc(airport.name)}</h1><p>${esc(airport.city)}${airport.country ? ', ' + esc(airport.country) : ''}. Choose how you want to travel.</p></div>${back}` +
 			(terminals.length ? `<div class="fa-terminalbar"><span>Where are you?</span>${terminals.map((t) => `<button type="button" class="fa-chip" data-n="${esc(t.name)}">${esc(t.name)}</button>`).join('')}</div>` : '') +
-			`<div class="fa-tabs fa-guidetabs">${categories.map((c) => `<button type="button" class="fa-tab" data-t="${esc(c)}">${esc(c)}</button>`).join('')}</div><div class="fa-guideview"></div>` +
-			(hasMapData ? '<div class="fa-guidemap"></div>' : '') +
+			`<div class="fa-tabs fa-guidetabs">${categories.map((c) => `<button type="button" class="fa-tab" data-t="${esc(c)}">${esc(c)}</button>`).join('')}</div><div class="fa-guidegrid${hasMapData ? ' has-map' : ''}"><div class="fa-guideview"></div>${hasMapData ? '<div class="fa-guidemap"></div>' : ''}</div>` +
 			`<p class="fa-panelnote">Times, routes and prices can change. Check the airport or operator website before you travel. Photos: Wikimedia Commons. <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(airport.name)}" target="_blank" rel="noopener">Open the airport in Google Maps</a></p>`;
 		view.querySelectorAll('.fa-guidetabs .fa-tab').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.t; url(); draw(); }));
 		view.querySelectorAll('.fa-terminalbar .fa-chip').forEach((b) => b.addEventListener('click', () => { terminal = b.dataset.n; url(); draw(); }));
@@ -2179,11 +2225,12 @@ class FlightStatusApp extends HTMLElement {
 	async view_airports(view) {
 		const wanted = new URLSearchParams(location.search).get('airport');
 		if (wanted) return this.guidePage(view, wanted);
-		const [ap, flights, guides] = await Promise.all([this.airports(), this.flights(), this.guideRows()]);
+		const [ap, flights, guides, boards] = await Promise.all([this.airports(), this.flights(), this.guideRows(), this.json('/o/flight-live/boards?siteId=' + SITE_ID()).catch(() => [])]);
+		const boardCodes = new Set(boards.map((b) => b.airportCode));
 		const list = Object.values(ap);
 		const count = (id) => flights.filter((f) => f.originAirportId == id || f.destinationAirportId == id).length;
 		view.innerHTML = '<div class="fa-title"><h1>Airports</h1><p>' + list.length + ' airports in our network.</p></div><div class="fa-grid">' +
-			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span><small>${count(a.id)} flight(s) today</small>${this.guideButton(a, guides, 'To and from the airport')}</div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p>';
+			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span>${boardCodes.has(a.code) ? `<a class="fa-livetag" href="${this._root}/flight-status?airport=${esc(a.code)}&dir=arr">Live arrivals &amp; departures</a>` : `<small>${count(a.id) ? count(a.id) + ' flights today' : 'No flights today'}</small>`}${this.guideButton(a, guides, 'To and from the airport')}</div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p>';
 		fillAllPhotos(view);
 		this.setupFilter(view, {key: 'airports', items: '.fa-card', placeholder: 'Search airport code, name, city or country'});
 	}

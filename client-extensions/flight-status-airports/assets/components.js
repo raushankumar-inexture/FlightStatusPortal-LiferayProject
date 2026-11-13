@@ -1,3 +1,4 @@
+(function () {
 /* ==========================================================================
    SHARED COMPONENTS — Flight Status Portal
    Vanilla JS utilities: Toast, Modal, Skeleton, API wrapper, Mobile Menu
@@ -203,3 +204,4 @@ window.fa = {
   statusBadgeClass,
   initMobileMenu,
 };
+})();

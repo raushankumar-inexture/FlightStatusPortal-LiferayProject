@@ -1,5 +1,3 @@
-import "./components.js";
-
 class FlightStatusHome extends HTMLElement {
 	connectedCallback() {
 		const base = this.getAttribute('flight-page') || '/web/flight-status-portal/flight-status';
