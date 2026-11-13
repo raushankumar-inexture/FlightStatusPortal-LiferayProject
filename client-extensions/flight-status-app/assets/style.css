@@ -1,4 +1,7 @@
-flight-status-app { display: block; font-family: inherit; color: #1c2434; --fa-blue: #0b5fff; --fa-navy: #12275c; --fa-line: #e4e8f0; --fa-bg: #f5f7fb; }
+@import url("design-tokens.css");
+@import url("components.css");
+
+flight-status-app { display: block; font-family: inherit; }
 flight-status-app * { box-sizing: border-box; }
 flight-status-app a { text-decoration: none; }
 flight-status-app .fa-header { position: fixed; top: var(--fa-top, 0px); left: 0; right: 0; z-index: 1000; background: var(--fa-navy); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
