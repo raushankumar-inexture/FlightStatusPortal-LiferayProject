@@ -1,0 +1,114 @@
+/* ==========================================================================
+   DESIGN TOKENS — Flight Status Portal
+   Single source of truth for colors, spacing, typography, shadows, radii
+   ========================================================================== */
+
+:root {
+  /* ── Colors ── */
+  --fa-primary: #0b5fff;
+  --fa-primary-hover: #0a52d9;
+  --fa-primary-light: #e3f0ff;
+  --fa-navy: #12275c;
+  --fa-navy-light: #f1f4fb;
+  --fa-gold: #ffb800;
+  --fa-gold-hover: #eaa800;
+  --fa-gold-light: #fff7e0;
+
+  --fa-success: #137333;
+  --fa-success-bg: #dcf7e3;
+  --fa-warning: #8a5a00;
+  --fa-warning-bg: #fff4d6;
+  --fa-danger: #b42318;
+  --fa-danger-bg: #fde8e8;
+  --fa-info: #2f7bff;
+  --fa-info-bg: #e3f0ff;
+
+  --fa-bg: #f5f7fb;
+  --fa-surface: #ffffff;
+  --fa-border: #e4e8f0;
+  --fa-border-hover: #c9d6f5;
+
+  --fa-text: #1c2434;
+  --fa-text-secondary: #6b7790;
+  --fa-text-muted: #94a3b8;
+  --fa-text-inverse: #ffffff;
+
+  /* ── Typography ── */
+  --fa-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --fa-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas,
+    "Liberation Mono", monospace;
+
+  --fa-text-xs: 0.75rem;      /* 12px */
+  --fa-text-sm: 0.875rem;     /* 14px */
+  --fa-text-base: 1rem;       /* 16px */
+  --fa-text-lg: 1.125rem;     /* 18px */
+  --fa-text-xl: 1.25rem;      /* 20px */
+  --fa-text-2xl: 1.5rem;      /* 24px */
+  --fa-text-3xl: 1.875rem;    /* 30px */
+  --fa-text-4xl: 2.25rem;     /* 36px */
+  --fa-text-5xl: 3rem;        /* 48px */
+
+  --fa-font-weight-normal: 400;
+  --fa-font-weight-medium: 500;
+  --fa-font-weight-semibold: 600;
+  --fa-font-weight-bold: 700;
+
+  --fa-line-height-tight: 1.25;
+  --fa-line-height-normal: 1.5;
+  --fa-line-height-relaxed: 1.75;
+
+  /* ── Spacing (8px grid) ── */
+  --fa-space-1: 0.25rem;   /* 4px */
+  --fa-space-2: 0.5rem;    /* 8px */
+  --fa-space-3: 0.75rem;   /* 12px */
+  --fa-space-4: 1rem;      /* 16px */
+  --fa-space-5: 1.25rem;   /* 20px */
+  --fa-space-6: 1.5rem;    /* 24px */
+  --fa-space-8: 2rem;      /* 32px */
+  --fa-space-10: 2.5rem;   /* 40px */
+  --fa-space-12: 3rem;     /* 48px */
+  --fa-space-16: 4rem;     /* 64px */
+
+  /* ── Border Radius ── */
+  --fa-radius-sm: 6px;
+  --fa-radius-md: 10px;
+  --fa-radius-lg: 14px;
+  --fa-radius-xl: 20px;
+  --fa-radius-full: 9999px;
+
+  /* ── Shadows ── */
+  --fa-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+  --fa-shadow-md: 0 4px 12px rgba(18, 39, 92, 0.08);
+  --fa-shadow-lg: 0 8px 24px rgba(18, 39, 92, 0.12);
+  --fa-shadow-xl: 0 18px 44px rgba(8, 18, 50, 0.25);
+
+  /* ── Transitions ── */
+  --fa-transition-fast: 150ms ease;
+  --fa-transition-base: 200ms ease;
+  --fa-transition-slow: 300ms ease;
+
+  /* ── Layout ── */
+  --fa-max-width: 1200px;
+  --fa-header-height: 72px;
+  --fa-footer-height: 64px;
+  --fa-z-dropdown: 1000;
+  --fa-z-sticky: 1100;
+  --fa-z-modal: 1200;
+  --fa-z-toast: 1300;
+}
+
+/* Dark mode support (optional, respects system preference) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fa-bg: #0f172a;
+    --fa-surface: #1e293b;
+    --fa-border: #334155;
+    --fa-border-hover: #475569;
+    --fa-text: #f1f5f9;
+    --fa-text-secondary: #94a3b8;
+    --fa-text-muted: #64748b;
+    --fa-navy: #1e293b;
+  }
+}
