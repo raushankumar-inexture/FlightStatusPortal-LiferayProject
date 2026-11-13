@@ -1,5 +1,3 @@
-import "./components.js";
-
 class FlightStatusFrontend extends HTMLElement {
 connectedCallback() {
 this.innerHTML =

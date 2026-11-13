@@ -1044,3 +1044,15 @@ flight-status-app .fa-pickup ol { margin: .5rem 0 0; padding-left: 1.2rem; color
 flight-status-app .fa-pickup .fa-btn { text-decoration: none; }
 flight-status-app .fa-chip.small { padding: .1rem .6rem; font-size: .78rem; cursor: default; }
 flight-status-app .fa-guidemap { height: 24rem; margin-bottom: 1.5rem; border-radius: var(--fa-radius); overflow: hidden; border: 1px solid var(--fa-line); }
+
+/* After the shared design system: header links, footer and admin width */
+flight-status-app .fa-header .fa-nav-link { color: #c9d6f5; }
+flight-status-app .fa-header .fa-nav-link:hover { color: #fff; background: rgba(255, 255, 255, .1); }
+flight-status-app .fa-header .fa-nav-link.active { color: #fff; background: var(--fa-blue); }
+flight-status-app.has-bigfooter .fa-footer { position: static; padding: 2.5rem 1.75rem 1rem; }
+flight-status-app.has-bigfooter .fa-footer__inner { display: block; max-width: 1440px; padding: 0; }
+flight-status-app.has-bigfooter .fa-footer__brand { display: none; }
+flight-status-app:not(.has-bigfooter) .fa-footer__inner { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .5rem 1.25rem; max-width: none; }
+flight-status-app:not(.has-bigfooter) .fa-footer__brand { margin: 0; font-size: .85rem; font-weight: 500; }
+flight-status-app .fa-footer__links { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+flight-status-app.has-sidebar .fa-container { max-width: none; padding: 0 1.5rem; }
