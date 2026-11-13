@@ -290,7 +290,7 @@ public class LiveApplication extends Application {
         }
     }
 
-    /** The arrivals (dir=A) or departures (dir=D) board of an airport for one day (yyyy-MM-dd, in the airport's time zone), as read from the airport's website. */
+    /** The arrivals (dir=A) or departures (dir=D) board of an airport for a time window (milliseconds), as read from the airport's website. */
     @GET
     @Path("/board")
     @Produces(MediaType.APPLICATION_JSON)
@@ -298,13 +298,26 @@ public class LiveApplication extends Application {
         @QueryParam("siteId") long siteId, @QueryParam("airport") String airport, @QueryParam("dir") String dir, @QueryParam("from") long from,
         @QueryParam("to") long to) {
 
+        if ((airport == null) || !airport.matches("[A-Za-z]{3}") || (dir == null) || !dir.matches("[ADad]")) {
+            return Response.status(400).entity("{\"error\":\"Bad airport or direction\"}").build();
+        }
+
         try {
+            // Every row's external reference code starts with CODE|DIRECTION|, so only this airport's rows are loaded.
+            com.liferay.portal.kernel.dao.orm.DynamicQuery query = _objectEntryLocalService.dynamicQuery();
+
+            query.add(com.liferay.portal.kernel.dao.orm.RestrictionsFactoryUtil.eq("groupId", siteId));
+            query.add(
+                com.liferay.portal.kernel.dao.orm.RestrictionsFactoryUtil.eq(
+                    "objectDefinitionId", _objectDefinitionLocalService.getObjectDefinition(PortalUtil.getDefaultCompanyId(), "C_BoardFlight").getObjectDefinitionId()));
+            query.add(
+                com.liferay.portal.kernel.dao.orm.RestrictionsFactoryUtil.like(
+                    "externalReferenceCode", airport.toUpperCase() + "|" + dir.toUpperCase() + "|%"));
+
             return Response.ok(
                 _rows(
-                    "C_BoardFlight", siteId,
-                    v -> _text(v.get("airportCode")).equalsIgnoreCase(airport) && _text(v.get("direction")).equalsIgnoreCase(dir) &&
-                    (v.get("scheduled") instanceof Date) && (((Date)v.get("scheduled")).getTime() >= from) &&
-                    (((Date)v.get("scheduled")).getTime() < to),
+                    _objectEntryLocalService.dynamicQuery(query),
+                    v -> (v.get("scheduled") instanceof Date) && (((Date)v.get("scheduled")).getTime() >= from) && (((Date)v.get("scheduled")).getTime() < to),
                     "flightNumber", "airline", "otherCode", "otherCity", "scheduled", "estimated", "terminal", "spot", "statusText").toString()).build();
         }
         catch (Exception exception) {
@@ -392,9 +405,15 @@ public class LiveApplication extends Application {
             String objectName, long siteId, java.util.function.Predicate<Map<String, Serializable>> keep, String... keys)
         throws Exception {
 
+        return _rows(_entries(objectName, siteId), keep, keys);
+    }
+
+    private JSONArray _rows(
+        List<ObjectEntry> entries, java.util.function.Predicate<Map<String, Serializable>> keep, String... keys) {
+
         JSONArray out = JSONFactoryUtil.createJSONArray();
 
-        for (ObjectEntry entry : _entries(objectName, siteId)) {
+        for (ObjectEntry entry : entries) {
             if (!keep.test(entry.getValues())) {
                 continue;
             }

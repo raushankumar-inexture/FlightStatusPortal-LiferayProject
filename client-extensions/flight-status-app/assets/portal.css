@@ -428,3 +428,7 @@ flight-status-app .fa-nav-links { z-index: 1001; }
 @media (max-width: 1060px) {
 	flight-status-app .fa-nav-links { max-height: 68vh; }
 }
+
+/* A board that stopped updating */
+flight-status-app .fa-fsresults > .fa-panelnote.fa-stale { background: #fff4d6; color: #8a5a00; border-radius: 12px; padding: .5rem .9rem; font-weight: 600; }
+flight-status-app .fa-fsresults > .fa-panelnote.fa-stale::before { background: #e0a800; box-shadow: 0 0 0 3px rgba(224, 168, 0, .25); }

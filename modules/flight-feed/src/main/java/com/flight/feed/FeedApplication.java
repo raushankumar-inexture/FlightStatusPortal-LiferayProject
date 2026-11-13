@@ -205,6 +205,45 @@ public class FeedApplication extends Application {
 		return Response.ok(out.toString()).build();
 	}
 
+	/**
+	 * How each airport board is doing, for the pages: the last good read and whether the board is out of date (no good read for
+	 * BOARD_STALE_MINUTES, default three rounds). "problem" is also true after BOARD_ALERT_FAILURES failed rounds in a row (default 3).
+	 * Administrators also get the last error.
+	 */
+	@GET
+	@Path("/boards")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response boards(@Context HttpServletRequest request) {
+		boolean admin = _admin(request) != null;
+		long now = System.currentTimeMillis();
+		long staleMinutes = FeedSupport.number("BOARD_STALE_MINUTES", 3 * Math.max(5, FeedSupport.number("BOARD_INTERVAL_MINUTES", 15)));
+		long alertAfter = FeedSupport.number("BOARD_ALERT_FAILURES", 3);
+
+		JSONArray out = JSONFactoryUtil.createJSONArray();
+
+		_boards.statuses().forEach(
+			(code, s) -> {
+				boolean stale = (s.lastOk > 0) ? ((now - s.lastOk) > (staleMinutes * 60_000L)) : (s.failures > 0);
+				JSONObject o = JSONFactoryUtil.createJSONObject();
+
+				o.put("airport", code);
+				o.put("lastOk", s.lastOk);
+				o.put("failures", s.failures);
+				o.put("rows", s.rows);
+				o.put("stale", stale);
+				o.put("problem", stale || (s.failures >= alertAfter));
+
+				if (admin) {
+					o.put("error", s.error);
+					o.put("lastTry", s.lastTry);
+				}
+
+				out.put(o);
+			});
+
+		return Response.ok(out.toString()).build();
+	}
+
 	/** "Sync now" button on the admin dashboard. */
 	@POST
 	@Path("/sync")

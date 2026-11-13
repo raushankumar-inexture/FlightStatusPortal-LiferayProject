@@ -46,20 +46,117 @@ final class BoardReader {
 		_definitions = definitions;
 		_entries = entries;
 
+		_loadConfig();
+		_loadStatus();
+	}
+
+	/** The airports: boards.properties inside the module, then bundles/data/boards.properties on top (add or change airports without code). */
+	private synchronized void _loadConfig() {
+		Properties config = new Properties();
+
 		try (InputStream in = BoardReader.class.getResourceAsStream("/boards.properties")) {
-			_config.load(in);
+			config.load(in);
 		}
 		catch (Exception exception) {
 			_log.error("Could not read boards.properties: " + exception);
 		}
+
+		try {
+			java.nio.file.Path file = FeedSupport.dataFile("boards.properties");
+
+			if (java.nio.file.Files.exists(file)) {
+				try (InputStream in = java.nio.file.Files.newInputStream(file)) {
+					config.load(in);
+				}
+			}
+		}
+		catch (Exception exception) {
+			_log.warn("Could not read bundles/data/boards.properties: " + exception);
+		}
+
+		_config.clear();
+		_config.putAll(config);
 	}
 
-	String lastResult() {
-		return _lastResult;
+	/** How each airport board is doing: last good read, failures in a row, rows, the day it was read in full. Kept in a small file so a restart does not forget. */
+	static final class Status {
+
+		long lastOk;
+		long lastTry;
+		int failures;
+		int rows;
+		String error = "";
+		String fullDay = "";
+
 	}
 
-	/** One round over every airport in boards.properties (or BOARD_AIRPORTS). */
-	synchronized void run() throws Exception {
+	private void _loadStatus() {
+		try {
+			java.nio.file.Path file = FeedSupport.dataFile("board-status.json");
+
+			if (java.nio.file.Files.exists(file)) {
+				JSONObject json = JSONFactoryUtil.createJSONObject(java.nio.file.Files.readString(file));
+
+				for (java.util.Iterator<String> it = json.keys(); it.hasNext();) {
+					String code = it.next();
+					JSONObject o = json.getJSONObject(code);
+					Status status = new Status();
+
+					status.lastOk = o.getLong("lastOk");
+					status.lastTry = o.getLong("lastTry");
+					status.failures = o.getInt("failures");
+					status.rows = o.getInt("rows");
+					status.error = o.getString("error");
+					status.fullDay = o.getString("fullDay");
+
+					_status.put(code, status);
+				}
+			}
+		}
+		catch (Exception exception) {
+			_log.warn("Could not read board-status.json: " + exception);
+		}
+	}
+
+	private void _saveStatus() {
+		try {
+			JSONObject json = JSONFactoryUtil.createJSONObject();
+
+			for (Map.Entry<String, Status> entry : _status.entrySet()) {
+				Status s = entry.getValue();
+				JSONObject o = JSONFactoryUtil.createJSONObject();
+
+				o.put("lastOk", s.lastOk);
+				o.put("lastTry", s.lastTry);
+				o.put("failures", s.failures);
+				o.put("rows", s.rows);
+				o.put("error", s.error);
+				o.put("fullDay", s.fullDay);
+
+				json.put(entry.getKey(), o);
+			}
+
+			java.nio.file.Files.writeString(FeedSupport.dataFile("board-status.json"), json.toString());
+		}
+		catch (Exception exception) {
+			_log.warn("Could not save board-status.json: " + exception);
+		}
+	}
+
+	/** The state of each airport that is configured now. */
+	synchronized Map<String, Status> statuses() {
+		Map<String, Status> out = new java.util.TreeMap<>();
+
+		for (String code : _codes()) {
+			if (_status.containsKey(code)) {
+				out.put(code, _status.get(code));
+			}
+		}
+
+		return out;
+	}
+
+	private Set<String> _codes() {
 		String wanted = FeedSupport.get("BOARD_AIRPORTS");
 		Set<String> codes = new LinkedHashSet<>();
 
@@ -73,29 +170,56 @@ final class BoardReader {
 			codes.retainAll(java.util.Arrays.asList(wanted.toUpperCase().split("\\s*,\\s*")));
 		}
 
+		return codes;
+	}
+
+	String lastResult() {
+		return _lastResult;
+	}
+
+	/** One round over every airport in boards.properties (or BOARD_AIRPORTS). A failing airport never stops the others. */
+	synchronized void run() throws Exception {
+		_loadConfig();
+
 		StringBuilder result = new StringBuilder();
 
-		for (String code : codes) {
+		for (String code : _codes()) {
+			Status status = _status.computeIfAbsent(code, k -> new Status());
+
+			status.lastTry = System.currentTimeMillis();
+
 			try {
-				int[] counts = _readAirport(code);
+				int[] counts = _readAirport(code, status);
+
+				status.lastOk = System.currentTimeMillis();
+				status.failures = 0;
+				status.error = "";
 
 				result.append(code).append(' ').append(counts[0]).append(" new, ").append(counts[1]).append(" changed; ");
 			}
 			catch (Exception exception) {
-				_log.warn("Board " + code + " failed: " + exception);
+				status.failures++;
+				status.error = String.valueOf(exception.getMessage()).replaceAll("\\s+", " ");
+
+				if (status.error.length() > 160) {
+					status.error = status.error.substring(0, 160);
+				}
+
+				_log.warn("Board " + code + " failed (" + status.failures + " in a row): " + exception);
 
 				result.append(code).append(" failed; ");
 			}
+
+			_saveStatus();
 		}
 
 		_lastResult = Instant.now() + " " + result;
-		_firstRound = false;
 
 		_cleanOld();
 	}
 
 	/** {new, changed} */
-	private int[] _readAirport(String code) throws Exception {
+	private int[] _readAirport(String code, Status status) throws Exception {
 		String base = _config.getProperty("airport." + code + ".url").replaceAll("/+$", "");
 		ZoneId zone = ZoneId.of(_config.getProperty("airport." + code + ".zone", _config.getProperty("zone", "Asia/Kolkata")));
 		ZonedDateTime now = ZonedDateTime.now(zone);
@@ -104,7 +228,7 @@ final class BoardReader {
 		// The whole day on the first round and once each new day; afterwards only the slots around now.
 		Set<String> slots = new LinkedHashSet<>();
 
-		if (_firstRound || !today.toString().equals(_fullDay.get(code))) {
+		if (!today.toString().equals(status.fullDay)) {
 			slots.addAll(java.util.Arrays.asList("1", "2", "3", "4"));
 		}
 		else {
@@ -114,11 +238,13 @@ final class BoardReader {
 		}
 
 		String source = _dataSource(base);
-		int created = 0, changed = 0;
+		int created = 0, changed = 0, read = 0;
 
 		for (String direction : new String[] {"A", "D"}) {
 			for (String slot : slots) {
 				for (Map<String, String> row : _readSlot(base, source, direction, today, slot)) {
+					read++;
+
 					int result = _save(code, direction, today, zone, row);
 
 					if (result == 1) {
@@ -131,9 +257,16 @@ final class BoardReader {
 			}
 		}
 
-		if (slots.size() == 4) {
-			_fullDay.put(code, today.toString());
+		// A whole day with no flights at all means the page changed or the board is empty: count it as a failure, not as a quiet day.
+		if ((slots.size() == 4) && (read == 0)) {
+			throw new IllegalStateException("The board returned no flights for the whole day");
 		}
+
+		if (slots.size() == 4) {
+			status.fullDay = today.toString();
+		}
+
+		status.rows = (slots.size() == 4) ? read : Math.max(status.rows, read);
 
 		return new int[] {created, changed};
 	}
@@ -156,7 +289,17 @@ final class BoardReader {
 			body.put("ServiceType", "Passenger");
 
 			JSONObject answer = JSONFactoryUtil.createJSONObject(_post(base + "/api/sitecore/FlightStatus/Search", body.toString()));
+
+			if (!answer.has("FlightHtml")) {
+				throw new IllegalStateException("The board answer has no flight list (the page may have changed)");
+			}
+
 			List<Map<String, String>> found = _parse(answer.getString("FlightHtml"));
+
+			// Rows are in the page but none could be read: the layout changed.
+			if (found.isEmpty() && (answer.getString("FlightHtml").split("flightListRow", -1).length > 2)) {
+				throw new IllegalStateException("The board rows could not be read (the page layout changed)");
+			}
 
 			rows.addAll(found);
 
@@ -414,11 +557,9 @@ final class BoardReader {
 
 	private final ObjectEntryLocalService _entries;
 
-	private final Map<String, String> _fullDay = new HashMap<>();
+	private final Map<String, Status> _status = new java.util.concurrent.ConcurrentHashMap<>();
 
 	private final Map<String, String> _sources = new HashMap<>();
-
-	private boolean _firstRound = true;
 
 	private String _cleaned = "";
 
