@@ -420,3 +420,11 @@ flight-status-app .fa-ckform, flight-status-app .fa-ckform input { min-width: 0;
 }
 flight-status-app.has-bigfooter .fa-footer { padding-left: 2rem; padding-right: 2rem; }
 flight-status-app.has-bigfooter .fa-footer__inner, flight-status-app .fa-footcols, flight-status-app .fa-footbar { max-width: calc(var(--p-wrap) - 4rem); }
+
+/* With Liferay's top bar visible the app is in "editing" mode and the header is not fixed. It still has to sit above the page,
+   or the mobile menu and the drop-downs open behind the hero and the search card. */
+flight-status-app.fa-editing .fa-header { position: relative; top: 0; z-index: 1000; }
+flight-status-app .fa-nav-links { z-index: 1001; }
+@media (max-width: 1060px) {
+	flight-status-app .fa-nav-links { max-height: 68vh; }
+}
