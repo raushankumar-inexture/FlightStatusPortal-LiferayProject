@@ -1,3 +1,5 @@
+import "./components.js";
+
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const getFetch = () => (window.Liferay && Liferay.Util && Liferay.Util.fetch ? Liferay.Util.fetch : fetch);
 const SITE_ID = () => Liferay.ThemeDisplay.getScopeGroupId();
@@ -406,14 +408,21 @@ class FlightStatusApp extends HTMLElement {
 			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '';
 		this.classList.toggle('has-sidebar', sidebarMode);
 		this.innerHTML =
-			'<header class="fa-header"><div class="fa-nav"><a class="fa-brand" href="' + root + (adminMode ? '/admin' : '/home') + '"><span class="fa-logo">' + ICONS.plane + '</span>Flight Status <b>' + (adminMode ? 'Admin' : 'Portal') + '</b></a>' +
+			'<header class="fa-header"><div class="fa-header__inner"><a class="fa-brand" href="' + root + (adminMode ? '/admin' : '/home') + '"><span class="fa-brand__logo">' + ICONS.plane + '</span>Flight Status <b>' + (adminMode ? 'Admin' : 'Portal') + '</b></a>' +
 			'<button class="fa-burger" type="button" aria-label="Menu">&#9776;</button>' +
-			'<nav class="fa-links">' + links + this.authLinks(root, current) + '</nav></div></header>' +
-			crumbs + (sidebarMode ? '' : '<div class="fa-alerts' + (crumbs ? '' : ' first') + '" hidden></div>') +
-			(sidebarMode ? '<div class="fa-adminshell">' + sidebar + '<main class="fa-view"><div class="fa-skel"><i></i><i></i><i></i></div></main></div>' : '<main class="fa-view"><div class="fa-skel"><i></i><i></i><i></i></div></main>') +
+			'<nav class="fa-nav-links">' + links + this.authLinks(root, current) + '</nav></div></header>' +
+			crumbs + '<div class="fa-container">' +
+			(sidebarMode ? '' : '<div class="fa-alerts' + (crumbs ? '' : ' first') + '" hidden></div>') +
+			(sidebarMode ? '<div class="fa-adminshell"><aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
+			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '') +
+			'<main class="fa-view"><div class="fa-skel"><i></i><i></i><i></i></div></main>' +
+			(sidebarMode ? '</div>' : '') +
+			'</div>' +
+			'<footer class="fa-footer"><div class="fa-footer__inner">' +
 			(adminMode
-				? '<footer class="fa-footer"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span class="fa-sep">&middot;</span><span>Admin Portal</span><span class="fa-sep">&middot;</span>' + this.legalLinks() + '</footer>'
-				: this.footerHtml(root));
+				? '<div class="fa-footer__brand">&copy; ' + new Date().getFullYear() + ' Flight Status Portal</div><div class="fa-footer__links"><span>Admin Portal</span>' + this.legalLinks() + '</div>'
+				: '<div class="fa-footer__brand">Flight Status Portal</div>' + this.footerHtml(root)) +
+			'</div></footer>';
 		this.classList.toggle('has-bigfooter', !adminMode);
 		this.classList.toggle('has-crumbs', !!crumbs);
 		this.loadNotices();
@@ -549,7 +558,7 @@ class FlightStatusApp extends HTMLElement {
 	// The menu: pages with a group (see ROUTES) share one drop-down; the others are plain links.
 	navLinks(root, current) {
 		const routes = ROUTES.filter(showRoute);
-		const link = (r) => `<a href="${root}/${r.slug}" class="${r.path === current ? 'active' : ''}">${r.label}</a>`;
+		const link = (r) => `<a href="${root}/${r.slug}" class="fa-nav-link ${r.path === current ? 'active' : ''}">${r.label}</a>`;
 		const shown = new Set();
 		return routes.map((r) => {
 			if (!r.group) return link(r);
@@ -578,11 +587,11 @@ class FlightStatusApp extends HTMLElement {
 		const routes = ROUTES.filter(showRoute);
 		const groups = [...new Set(routes.filter((r) => r.group).map((r) => r.group))];
 		const mine = ROUTES.filter((r) => r.menu && (!r.auth || Liferay.ThemeDisplay.isSignedIn()));
-		return '<footer class="fa-footer fa-footbig"><div class="fa-footcols">' +
+		return '<div class="fa-footcols">' +
 			`<div class="fa-footbrand"><a class="fa-brand" href="${root}/home"><span class="fa-logo">${ICONS.plane}</span>Flight Status <b>Portal</b></a><p>Live flight information for every airport we cover.</p></div>` +
 			col('Explore', routes.filter((r) => !r.group).map(link)) + groups.map((g) => col(g, routes.filter((r) => r.group === g).map(link))).join('') +
 			col('Help', ROUTES.filter((r) => r.help).map((r) => `<a href="${root}/${r.slug}">${esc(r.help[0])}</a>`)) + col('My account', mine.map(link)) + col('Legal', this.legalLinks().split('</button>').filter(Boolean).map((b) => b + '</button>')) +
-			'</div><div class="fa-footbar"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span>Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons</span></div></footer>';
+			'</div><div class="fa-footbar"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span>Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons</span></div>';
 	}
 
 	bindShell() {
@@ -1431,13 +1440,13 @@ class FlightStatusApp extends HTMLElement {
 		const t = Liferay.ThemeDisplay;
 		if (t.isSignedIn()) {
 			const name = t.getUserName() || 'Account';
-			const items = ROUTES.filter((r) => r.menu && r.auth).map((r) => `<a href="${root}/${r.slug}" class="${r.path === current ? 'active' : ''}">${r.label}</a>`).join('');
+			const items = ROUTES.filter((r) => r.menu && r.auth).map((r) => `<a href="${root}/${r.slug}" class="fa-nav-link ${r.path === current ? 'active' : ''}">${r.label}</a>`).join('');
 			return '<div class="fa-bellwrap"><button type="button" class="fa-bell" aria-label="Notifications">' + ICONS.bell + '<span class="fa-bellcount" hidden></span></button><div class="fa-notes" hidden></div></div>' +
 				'<div class="fa-usermenu"><button type="button" class="fa-userbtn" aria-haspopup="true" aria-expanded="false"><span class="fa-avatar">' + esc(name.trim().charAt(0).toUpperCase()) + '</span><span class="fa-uname">' + esc(name) + '</span><span class="fa-caret">&#9662;</span></button>' +
 				'<div class="fa-usermenu-list" hidden><div class="fa-umhead">Signed in as<b>' + esc(name) + '</b></div>' + items +
 				`<a class="fa-logout" href="${t.getPathContext()}/c/portal/logout?referer=${encodeURIComponent(root + '/login')}">Logout</a></div></div>`;
 		}
-		return `<a class="fa-auth ${current === 'login' ? 'active' : ''}" href="${root}/login">Login</a><a class="fa-auth primary ${current === 'register' ? 'active' : ''}" href="${root}/register">Register</a>`;
+			return `<a class="fa-btn fa-btn--outline fa-auth ${current === 'login' ? 'active' : ''}" href="${root}/login">Login</a><a class="fa-btn fa-btn--gold fa-auth ${current === 'register' ? 'active' : ''}" href="${root}/register">Register</a>`;
 	}
 
 	async loginUrl(extra) {

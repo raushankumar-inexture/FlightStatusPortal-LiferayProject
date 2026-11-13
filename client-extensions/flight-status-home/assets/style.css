@@ -1,3 +1,6 @@
+@import url("design-tokens.css");
+@import url("components.css");
+
 flight-status-home { display: block; }
 flight-status-home .fh-hero { padding: 4rem 1.5rem; text-align: center; color: #fff; background: linear-gradient(135deg, #0b5fff, #1b3a8a); border-radius: 12px; }
 flight-status-home .fh-hero h1 { margin: 0 0 .5rem; font-size: 2.5rem; }

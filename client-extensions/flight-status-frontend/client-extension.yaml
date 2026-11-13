@@ -3,11 +3,14 @@ assemble:
     into: static
 flight-status-frontend:
   cssURLs:
+    - design-tokens.css
+    - components.css
     - style.css
   htmlElementName: flight-status-frontend
   instanceable: false
   name: Flight Status Frontend
   type: customElement
   urls:
+    - components.js
     - index.js
   useESM: false

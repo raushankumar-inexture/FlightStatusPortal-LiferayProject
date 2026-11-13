@@ -1,3 +1,6 @@
+@import url("design-tokens.css");
+@import url("components.css");
+
 flight-status-frontend { display: block; }
 flight-status-frontend .fs-app { font-family: inherit; padding: 1.5rem; max-width: 1000px; margin: 0 auto; }
 flight-status-frontend .fs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
