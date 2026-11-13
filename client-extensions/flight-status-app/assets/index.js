@@ -99,6 +99,8 @@ const HERO_PHOTOS = [
 	['21.jpg', 'Sam Ferrara', 'CC0'], ['22.jpg', 'Martin Falbisoner', 'CC BY-SA 4.0'], ['23.jpg', 'Basile Morin', 'CC BY-SA 4.0'], ['24.jpg', 'Wilfredor', 'CC0'],
 	['25.jpg', 'Pierre Blaché', 'CC0'], ['26.jpg', 'Vyacheslav Argenberg', 'CC BY 4.0'],
 ];
+// The pictures for the login and register pages (files in assets/hero, listed above): 3 aircraft and 2 airports.
+const AUTH_PHOTOS = ['1.jpg', '3.jpg', '7.jpg', '8.jpg', '9.jpg'];
 const HERO = (() => {
 	let i = Math.floor(Math.random() * HERO_PHOTOS.length);
 	try {
@@ -1450,14 +1452,26 @@ class FlightStatusApp extends HTMLElement {
 		return fetch(url, {method: 'POST', body, credentials: 'include'});
 	}
 
-	// Login and Register share one look: an airport or aircraft picture (loaded from Wikipedia, never stored) beside the form.
+	// One of the login pictures (AUTH_PHOTOS, saved in assets/hero), picked at random each time a login or register page is drawn, never the same twice in a row.
+	authPhoto() {
+		// Never one of the last two pictures shown (the page can be drawn twice while it loads).
+		let recent = [];
+		try { recent = (sessionStorage.getItem('faAuthPhoto') || '').split(',').filter(Boolean).map(Number); } catch (e) {}
+		const choices = AUTH_PHOTOS.map((f, n) => n).filter((n) => !recent.includes(n));
+		const i = choices[Math.floor(Math.random() * choices.length)];
+		try { sessionStorage.setItem('faAuthPhoto', [i].concat(recent).slice(0, 2).join(',')); } catch (e) {}
+		const credit = HERO_PHOTOS.find((p) => p[0] === AUTH_PHOTOS[i]) || [];
+		return {file: AUTH_PHOTOS[i], credit: credit[1] ? credit[1] + ' (' + credit[2] + '), Wikimedia Commons' : 'Wikimedia Commons'};
+	}
+
+	// Login and Register share one look: an aircraft or airport picture beside the form. The photographer is named in the footer and in a hover text, not on the picture.
 	authShell(title, cardTitle, subtitle, formHtml, altHtml) {
-		const topics = ['Cloud', 'Cumulus cloud', 'Airbus A350', 'Boeing 787 Dreamliner', 'Indira Gandhi International Airport', 'Dubai International Airport'];
-		const topic = topics[Math.floor(Date.now() / 86400000) % topics.length];
-		return '<div class="fa-authpage" data-photo-city="' + esc(topic) + '" data-photo-overlay="linear-gradient(180deg, rgba(12,34,92,.50), rgba(8,18,50,.84))"><div class="fa-authwrap">' +
+		const photo = this.authPhoto();
+		Promise.resolve().then(() => { const credit = this.querySelector('.fa-footbar span:last-child'); if (credit) credit.textContent = 'Photo: ' + photo.credit; });
+		return '<div class="fa-authpage has-photo" title="Photo: ' + esc(photo.credit) + '" style="background-image: linear-gradient(180deg, rgba(12,34,92,.50), rgba(8,18,50,.84)), url(\'/o/flight-status-app/hero/' + esc(photo.file) + '\')"><div class="fa-authwrap">' +
 			'<h1 class="fa-authtitle">' + title + '</h1>' +
 			'<section class="fa-authcard2"><header>' + cardTitle + '</header><div class="fa-authbody">' + (subtitle ? '<p class="fa-authsub">' + subtitle + '</p>' : '') + formHtml + altHtml + '</div></section>' +
-			'<small class="fa-authcredit">Background: ' + esc(topic) + ' &middot; Wikipedia / Wikimedia Commons</small></div></div>';
+			'</div></div>';
 	}
 
 	pwdToggle(view) {
