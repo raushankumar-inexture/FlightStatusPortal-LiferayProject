@@ -88,6 +88,8 @@ public class FeedApplication extends Application {
 
 	private ScheduledExecutorService _scheduler;
 
+	private BoardReader _boards;
+
 	/** Full status answers kept for 10 minutes: flight number to {time, json}. */
 	private final Map<String, Object[]> _lookups = new ConcurrentHashMap<>();
 
@@ -121,9 +123,11 @@ public class FeedApplication extends Application {
 			_log.warn("Could not read the last feed run: " + exception.getMessage());
 		}
 
-		// Two threads, so a slow provider sync never delays the live check.
+		_boards = new BoardReader(_objectDefinitionLocalService, _objectEntryLocalService);
+
+		// Three threads, so a slow provider sync or a slow airport board never delays the live check.
 		_scheduler = Executors.newScheduledThreadPool(
-			2,
+			3,
 			runnable -> {
 				Thread thread = new Thread(runnable, "flight-feed");
 
@@ -134,6 +138,9 @@ public class FeedApplication extends Application {
 
 		// Every 2 minutes: the free live check of planes in the air.
 		_scheduler.scheduleWithFixedDelay(() -> _run("Live position check", this::_liveCheck), 1, 2, TimeUnit.MINUTES);
+
+		// The airport boards (arrivals and departures) are read every BOARD_INTERVAL_MINUTES (default 15).
+		_scheduler.scheduleWithFixedDelay(() -> _run("Airport boards", _boards::run), 2, Math.max(5, FeedSupport.number("BOARD_INTERVAL_MINUTES", 15)), TimeUnit.MINUTES);
 
 		// Every 2 minutes: the provider sync, but only when the key is set and the wait time has passed (it uses the monthly calls).
 		_scheduler.scheduleWithFixedDelay(
@@ -192,6 +199,7 @@ public class FeedApplication extends Application {
 		out.put("airports", FeedSupport.get("FEED_AIRPORTS") == null ? "" : FeedSupport.get("FEED_AIRPORTS"));
 		out.put("liveLast", _liveLast);
 		out.put("liveUpdated", _liveUpdated);
+		out.put("boards", _boards.lastResult());
 		out.put("webhookOn", FeedSupport.get("FEED_WEBHOOK_SECRET") != null);
 
 		return Response.ok(out.toString()).build();
