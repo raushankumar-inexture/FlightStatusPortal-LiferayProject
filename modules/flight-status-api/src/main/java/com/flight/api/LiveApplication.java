@@ -160,12 +160,19 @@ public class LiveApplication extends Application {
     @GET
     @Path("/flights")
     @Produces(MediaType.APPLICATION_JSON)
-    public Response flights(@QueryParam("siteId") long siteId) {
+    public Response flights(@QueryParam("siteId") long siteId, @QueryParam("all") boolean all) {
         try {
             JSONArray out = JSONFactoryUtil.createJSONArray();
 
+            boolean liveOnly = !all && _liveOnly();
+
             for (ObjectEntry entry : _entries("C_Flight", siteId)) {
                 Map<String, Serializable> v = entry.getValues();
+
+                // PUBLIC_FLIGHTS=live in flight-feed.properties hides the flights an administrator typed in.
+                if (liveOnly && !"feed".equals(_text(v.get("source")))) {
+                    continue;
+                }
 
                 JSONObject flight = JSONFactoryUtil.createJSONObject();
 
@@ -283,6 +290,58 @@ public class LiveApplication extends Application {
         }
     }
 
+    /** The arrivals (dir=A) or departures (dir=D) board of an airport for one day (yyyy-MM-dd, in the airport's time zone), as read from the airport's website. */
+    @GET
+    @Path("/board")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response board(
+        @QueryParam("siteId") long siteId, @QueryParam("airport") String airport, @QueryParam("dir") String dir, @QueryParam("from") long from,
+        @QueryParam("to") long to) {
+
+        try {
+            return Response.ok(
+                _rows(
+                    "C_BoardFlight", siteId,
+                    v -> _text(v.get("airportCode")).equalsIgnoreCase(airport) && _text(v.get("direction")).equalsIgnoreCase(dir) &&
+                    (v.get("scheduled") instanceof Date) && (((Date)v.get("scheduled")).getTime() >= from) &&
+                    (((Date)v.get("scheduled")).getTime() < to),
+                    "flightNumber", "airline", "otherCode", "otherCity", "scheduled", "estimated", "terminal", "spot", "statusText").toString()).build();
+        }
+        catch (Exception exception) {
+            return Response.status(500).entity("{\"error\":\"Could not load the board\"}").build();
+        }
+    }
+
+    /** The airports that have a board, with the time of their newest row. */
+    @GET
+    @Path("/boards")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response boards(@QueryParam("siteId") long siteId) {
+        try {
+            JSONArray out = JSONFactoryUtil.createJSONArray();
+            Map<String, Long> newest = new java.util.TreeMap<>();
+
+            for (ObjectEntry entry : _entries("C_BoardFlight", siteId)) {
+                String code = _text(entry.getValues().get("airportCode"));
+
+                newest.merge(code, entry.getModifiedDate().getTime(), Math::max);
+            }
+
+            newest.forEach((code, time) -> {
+                JSONObject row = JSONFactoryUtil.createJSONObject();
+
+                row.put("airportCode", code);
+                row.put("updated", time);
+                out.put(row);
+            });
+
+            return Response.ok(out.toString()).build();
+        }
+        catch (Exception exception) {
+            return Response.status(500).entity("{\"error\":\"Could not load the boards\"}").build();
+        }
+    }
+
     /** The terminals of an airport, with their map position when the admin gave one. */
     @GET
     @Path("/terminals")
@@ -345,13 +404,48 @@ public class LiveApplication extends Application {
             row.put("id", entry.getObjectEntryId());
 
             for (String key : keys) {
-                row.put(key, _text(entry.getValues().get(key)));
+                Object value = entry.getValues().get(key);
+
+                row.put(key, (value instanceof Date) ? _time(value) : _text(value));
             }
 
             out.put(row);
         }
 
         return out;
+    }
+
+    private static long _settingRead = 0;
+
+    private static boolean _liveOnlySetting = false;
+
+    /** True when bundles/data/flight-feed.properties says PUBLIC_FLIGHTS=live (read again every 30 seconds). */
+    private static synchronized boolean _liveOnly() {
+        if ((System.currentTimeMillis() - _settingRead) < 30_000) {
+            return _liveOnlySetting;
+        }
+
+        _settingRead = System.currentTimeMillis();
+
+        try {
+            java.nio.file.Path file = java.nio.file.Paths.get(
+                com.liferay.portal.kernel.util.PropsUtil.get(com.liferay.portal.kernel.util.PropsKeys.LIFERAY_HOME), "data", "flight-feed.properties");
+
+            java.util.Properties properties = new java.util.Properties();
+
+            if (java.nio.file.Files.exists(file)) {
+                try (java.io.InputStream in = java.nio.file.Files.newInputStream(file)) {
+                    properties.load(in);
+                }
+            }
+
+            _liveOnlySetting = "live".equalsIgnoreCase(properties.getProperty("PUBLIC_FLIGHTS", "all").trim());
+        }
+        catch (Exception exception) {
+            _liveOnlySetting = false;
+        }
+
+        return _liveOnlySetting;
     }
 
     private List<ObjectEntry> _entries(String objectName, long siteId) throws Exception {
