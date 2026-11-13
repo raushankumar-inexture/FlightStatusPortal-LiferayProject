@@ -948,6 +948,8 @@ class FlightStatusApp extends HTMLElement {
 		const airports = airportsRaw.items, gates = gatesRaw.items, flights = flightsRaw.items, bookings = bookingsRaw.items;
 		let passes = [], reservations = [];
 		if (tab === 'reservations' || tab === 'dashboard') { try { passes = (await this.json('/o/c/boardingpasses/scopes/' + SITE_ID() + '?pageSize=200')).items || []; } catch (e) {} }
+		let boardIssues = [];
+		if (tab === 'dashboard') { try { boardIssues = (await this.json('/o/flight-feed/boards')).filter((b) => b.problem); } catch (e) {} }
 		let openHelp = 0;
 		try { openHelp = ((await this.json(ENT.assistance.list)).items || []).filter((x) => x.requestStatus === 'Open').length; } catch (e) {}
 		const apById = Object.fromEntries(airports.map((a) => [a.id, a]));
@@ -971,7 +973,8 @@ class FlightStatusApp extends HTMLElement {
 			passes.forEach((p) => events.push({t: Date.parse(p.dateCreated) || 0, icon: 'users', text: esc(p.creator ? p.creator.name : 'A passenger') + ' checked in <b>' + esc(p.pnr) + '</b>, seat ' + esc(p.seat)}));
 			events.sort((x, y) => y.t - x.t);
 			const tiles = [['plane', flights.length, 'Flights'], ['clock', flights.filter(isDelayed).length, 'Delayed flights'], ['ticket', bookings.length, 'Bookings'], ['users', passes.length, 'Checked in'], ['building', airports.length, 'Airports'], ['gate', gates.length, 'Gates'], ['bell', openHelp, 'Open help requests', 'assistance']];
-			body = '<div class="fa-adminbtns"><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button><button class="fa-btn block-auto" data-add="bookings">+ Add Booking</button><button class="fa-btn block-auto" data-add="airports">+ Add Airport</button><button class="fa-btn block-auto" data-add="gates">+ Add Gate</button><button class="fa-btn block-auto" data-add="notices">+ Add Notice</button><button class="fa-btn block-auto" data-add="guides">+ Add Guide entry</button></div>' +
+			body = (boardIssues.length ? '<div class="fa-notice error"><b>Airport boards need attention.</b> ' + boardIssues.map((b) => esc(b.airport) + ': ' + (b.stale ? 'not updated since ' + (Number(b.lastOk) ? new Date(Number(b.lastOk)).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'it was added') : '') + (Number(b.failures) ? ' (' + Number(b.failures) + ' failed round' + (Number(b.failures) > 1 ? 's' : '') + ' in a row' + (b.error ? ', ' + esc(b.error) : '') + ')' : '')).join('; ') + '. The pages show our backup flight data for these airports.</div>' : '') +
+				'<div class="fa-adminbtns"><button class="fa-btn block-auto" data-add="flights">+ Add Flight</button><button class="fa-btn block-auto" data-add="bookings">+ Add Booking</button><button class="fa-btn block-auto" data-add="airports">+ Add Airport</button><button class="fa-btn block-auto" data-add="gates">+ Add Gate</button><button class="fa-btn block-auto" data-add="notices">+ Add Notice</button><button class="fa-btn block-auto" data-add="guides">+ Add Guide entry</button></div>' +
 				'<div class="fa-dashtiles">' + tiles.map((t) => `<${t[3] ? 'a href="' + this._root + '/admin?tab=' + t[3] + '"' : 'div'} class="fa-stat"><span class="fa-ico">${ICONS[t[0]]}</span><div><b>${t[1]}</b><span>${t[2]}</span></div></${t[3] ? 'a' : 'div'}>`).join('') + '</div>' +
 				'<div class="fa-dashgrid">' +
 				'<section class="fa-dashcard"><h3>Flights by status</h3><div class="fa-donutwrap"><div class="fa-donut" style="background:conic-gradient(' + (stops || '#e3e9f6 0% 100%') + ')"><span>' + flights.length + '<small>flights</small></span></div><ul class="fa-legend">' +
@@ -1750,13 +1753,23 @@ class FlightStatusApp extends HTMLElement {
 		});
 	}
 
+	// The airports whose own board we read and how each is doing: [{airport, lastOk, stale, problem, rows}]. Cached for 30 seconds.
+	async boardHealth() {
+		if (!this._bh || (Date.now() - this._bh.at) > 30000) {
+			let list = [];
+			try { list = await this.json('/o/flight-feed/boards'); } catch (e) {}
+			this._bh = {at: Date.now(), list: list.filter((b) => Number(b.rows) > 0 || Number(b.lastOk) > 0)};
+		}
+		return this._bh.list;
+	}
+
 	// Home page: the airports whose own board we read, with the arrivals or departures around now. A tab for each airport.
 	async bindLiveBoard(view, ap) {
 		const box = view.querySelector('.fa-liveboard');
 		if (!box) return;
 		const tabs = box.querySelector('.fa-lbtabs'), body = box.querySelector('.fa-lbbody');
-		let boards = [];
-		try { boards = await this.json('/o/flight-live/boards?siteId=' + SITE_ID()); } catch (e) {}
+		// the boards that are updating (a board that stopped is left out)
+		const boards = (await this.boardHealth()).filter((b) => !b.stale).map((b) => ({airportCode: b.airport}));
 		view.querySelectorAll('[data-lbcount]').forEach((e) => { e.textContent = boards.length; });
 		if (!boards.length) { box.hidden = true; return; }
 		const city = (code) => (Object.values(ap).find((a) => a.code === code) || {}).city || code;
@@ -1803,8 +1816,12 @@ class FlightStatusApp extends HTMLElement {
 		const load = async () => { [flights, ap] = await Promise.all([this.flights(), this.airports()]); };
 		await load();
 		// Airports whose own arrivals and departures board we read (BoardFlight rows). Their other airports may not be in our list: bap holds those.
-		const boardCodes = new Set((await this.json('/o/flight-live/boards?siteId=' + SITE_ID()).catch(() => [])).map((b) => b.airportCode));
+		const boardCodes = new Set((await this.boardHealth()).map((b) => b.airport));
 		const bap = {}, boardCache = {};
+		// How each board is doing (last good read, out of date or not). A board that stopped updating is not used: the page falls back to our other flight data.
+		let boardInfo = {};
+		const loadBoardInfo = async () => { this._bh = null; boardInfo = Object.fromEntries((await this.boardHealth()).map((b) => [b.airport, b])); };
+		await loadBoardInfo();
 		const airportOf = (id) => ap[id] || bap[id] || {};
 		const airports = Object.values(ap).sort((a, b) => String(a.city).localeCompare(String(b.city)));
 		const wanted = new URLSearchParams(location.search), wantedAirport = wanted.get('airport') && Object.values(ap).find((a) => a.code === wanted.get('airport').toUpperCase());
@@ -1850,7 +1867,14 @@ class FlightStatusApp extends HTMLElement {
 				departureTime: arr ? '' : (r.estimated || r.scheduled), scheduledDeparture: arr ? '' : r.scheduled, arrivalTime: arr ? (r.estimated || r.scheduled) : '', scheduledArrival: arr ? r.scheduled : '',
 				depTerminal: arr ? '' : r.terminal, arrTerminal: arr ? r.terminal : '', depGate: arr ? '' : r.spot, arrGate: '', belt: arr ? r.spot : ''};
 		};
-		const boardKey = () => { const a = ap[st.airport]; return (st.tab === 'airport' && a && boardCodes.has(a.code)) ? a.code + '|' + (st.dir === 'arr' ? 'A' : 'D') + '|' + st.date : ''; };
+		const staleBoard = () => { const a = ap[st.airport]; return (st.tab === 'airport' && a && boardCodes.has(a.code) && boardInfo[a.code] && boardInfo[a.code].stale) ? boardInfo[a.code] : null; };
+		const boardKey = () => { const a = ap[st.airport]; return (st.tab === 'airport' && a && boardCodes.has(a.code) && !staleBoard()) ? a.code + '|' + (st.dir === 'arr' ? 'A' : 'D') + '|' + st.date : ''; };
+		const clock = (ms) => (Number(ms) ? new Date(Number(ms)).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'a while ago');
+		const boardNote = () => {
+			const a = ap[st.airport], late = staleBoard();
+			if (late) return '<p class="fa-panelnote fa-stale">The airport\'s own board has not updated since ' + esc(clock(late.lastOk)) + ', so this list comes from our backup data and may be incomplete.</p>';
+			return boardRows() ? '<p class="fa-panelnote">Live from the airport\'s own board' + (a && boardInfo[a.code] && Number(boardInfo[a.code].lastOk) ? ' &middot; updated ' + esc(clock(boardInfo[a.code].lastOk)) : '') + '</p>' : '';
+		};
 		const boardRows = () => { const rows = boardCache[boardKey()]; return rows && rows.length ? rows : null; };
 		const ensureBoard = async (force) => {
 			const key = boardKey();
@@ -1937,7 +1961,7 @@ class FlightStatusApp extends HTMLElement {
 			if (st.tab === 'flight') { box.innerHTML = ''; return; }
 			const list = results();
 			box.innerHTML = '<div class="fa-fshead"><h2>' + (st.tab === 'airport' ? esc(airportOf(st.airport).city || 'Airport') + ' ' + (arrivals() ? 'arrivals' : 'departures') : 'Flights on this route') + '</h2><span>' + list.length + ' flight' + (list.length === 1 ? '' : 's') + ' on ' + esc(fmtDate(st.date + 'T12:00:00')) + '</span>' + (st.tab === 'airport' ? this.guideButton(ap[st.airport], guides, 'To and from this airport') : '') + '</div>' +
-				(boardRows() ? '<p class="fa-panelnote">Live from the airport\'s own arrivals and departures board.</p>' : '') + (list.length && st.tab === 'airport' ? '<div class="fa-fthead fa-fthead--air" aria-hidden="true"><span>Airline</span><span>' + (arrivals() ? 'From' : 'To') + '</span><span>' + (arrivals() ? 'Arrival' : 'Departure') + '</span><span>' + (arrivals() ? 'Terminal / belt' : 'Terminal / gate') + '</span><span>Status</span><span></span></div>' : '') + (list.length ? list.map(row).join('') : '<div class="fa-msg">No flights found for this day. Try another day or airport. Our live data covers only some flights each day.</div>');
+				boardNote() + (list.length && st.tab === 'airport' ? '<div class="fa-fthead fa-fthead--air" aria-hidden="true"><span>Airline</span><span>' + (arrivals() ? 'From' : 'To') + '</span><span>' + (arrivals() ? 'Arrival' : 'Departure') + '</span><span>' + (arrivals() ? 'Terminal / belt' : 'Terminal / gate') + '</span><span>Status</span><span></span></div>' : '') + (list.length ? list.map(row).join('') : '<div class="fa-msg">No flights found for this day. Try another day or airport. Our live data covers only some flights each day.</div>');
 			box.querySelectorAll('.fa-fhead').forEach((b) => b.addEventListener('click', () => { st.open.has(b.dataset.id) ? st.open.delete(b.dataset.id) : st.open.add(b.dataset.id); drawResults(); }));
 			box.querySelectorAll('[data-track]').forEach((b) => b.addEventListener('click', () => { st.tab = 'flight'; st.track = b.dataset.track; drawPane(); window.scrollTo({top: 0, behavior: 'smooth'}); }));
 			fillWeather();
@@ -1989,7 +2013,7 @@ class FlightStatusApp extends HTMLElement {
 		});
 		drawPane();
 		clearInterval(this._timer);
-		this._timer = setInterval(async () => { try { await load(); if (boardKey()) await ensureBoard(true); stamp(); if (st.tab !== 'flight') drawResults(); } catch (e) {} }, 30000);
+		this._timer = setInterval(async () => { try { await load(); await loadBoardInfo(); if (boardKey()) await ensureBoard(true); stamp(); if (st.tab !== 'flight') drawResults(); } catch (e) {} }, 30000);
 	}
 
 	async view_search(view, q) {
@@ -2225,8 +2249,8 @@ class FlightStatusApp extends HTMLElement {
 	async view_airports(view) {
 		const wanted = new URLSearchParams(location.search).get('airport');
 		if (wanted) return this.guidePage(view, wanted);
-		const [ap, flights, guides, boards] = await Promise.all([this.airports(), this.flights(), this.guideRows(), this.json('/o/flight-live/boards?siteId=' + SITE_ID()).catch(() => [])]);
-		const boardCodes = new Set(boards.map((b) => b.airportCode));
+		const [ap, flights, guides, boards] = await Promise.all([this.airports(), this.flights(), this.guideRows(), this.boardHealth()]);
+		const boardCodes = new Set(boards.filter((b) => !b.stale).map((b) => b.airport));
 		const list = Object.values(ap);
 		const count = (id) => flights.filter((f) => f.originAirportId == id || f.destinationAirportId == id).length;
 		view.innerHTML = '<div class="fa-title"><h1>Airports</h1><p>' + list.length + ' airports in our network.</p></div><div class="fa-grid">' +
