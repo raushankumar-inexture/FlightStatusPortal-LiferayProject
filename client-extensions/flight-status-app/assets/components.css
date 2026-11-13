@@ -1,0 +1,172 @@
+/* ==========================================================================
+   SHARED COMPONENTS — Flight Status Portal
+   Part 1: Reset, Base, Buttons, Inputs
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--fa-font-sans);
+  font-size: var(--fa-text-base);
+  line-height: var(--fa-line-height-normal);
+  color: var(--fa-text);
+  background: var(--fa-bg);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--fa-primary);
+  text-decoration: none;
+  transition: color var(--fa-transition-fast);
+}
+
+a:hover {
+  color: var(--fa-primary-hover);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ── Container ── */
+.fa-container {
+  max-width: var(--fa-max-width);
+  margin: 0 auto;
+  padding: 0 var(--fa-space-4);
+}
+
+/* ── Buttons ── */
+.fa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--fa-space-2);
+  padding: var(--fa-space-3) var(--fa-space-5);
+  border: none;
+  border-radius: var(--fa-radius-md);
+  font-size: var(--fa-text-sm);
+  font-weight: var(--fa-font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--fa-transition-base);
+  text-decoration: none;
+  line-height: 1;
+}
+
+.fa-btn:focus-visible {
+  outline: 2px solid var(--fa-primary);
+  outline-offset: 2px;
+}
+
+.fa-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fa-btn--primary {
+  background: var(--fa-primary);
+  color: var(--fa-text-inverse);
+}
+
+.fa-btn--primary:hover:not(:disabled) {
+  background: var(--fa-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--fa-shadow-md);
+}
+
+.fa-btn--gold {
+  background: var(--fa-gold);
+  color: var(--fa-text);
+}
+
+.fa-btn--gold:hover:not(:disabled) {
+  background: var(--fa-gold-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--fa-shadow-md);
+}
+
+.fa-btn--outline {
+  background: transparent;
+  border: 1px solid var(--fa-border);
+  color: var(--fa-text);
+}
+
+.fa-btn--outline:hover:not(:disabled) {
+  border-color: var(--fa-primary);
+  background: var(--fa-primary-light);
+  color: var(--fa-primary);
+}
+
+.fa-btn--ghost {
+  background: transparent;
+  color: var(--fa-text-secondary);
+}
+
+.fa-btn--ghost:hover:not(:disabled) {
+  background: var(--fa-bg);
+  color: var(--fa-text);
+}
+
+.fa-btn--sm {
+  padding: var(--fa-space-2) var(--fa-space-4);
+  font-size: var(--fa-text-xs);
+}
+
+.fa-btn--lg {
+  padding: var(--fa-space-4) var(--fa-space-6);
+  font-size: var(--fa-text-base);
+}
+
+.fa-btn--full {
+  width: 100%;
+}
+
+/* ── Inputs ── */
+.fa-input {
+  display: block;
+  width: 100%;
+  padding: var(--fa-space-3) var(--fa-space-4);
+  font-size: var(--fa-text-base);
+  font-family: inherit;
+  color: var(--fa-text);
+  background: var(--fa-surface);
+  border: 1px solid var(--fa-border);
+  border-radius: var(--fa-radius-md);
+  transition: all var(--fa-transition-fast);
+}
+
+.fa-input:focus {
+  outline: none;
+  border-color: var(--fa-primary);
+  box-shadow: 0 0 0 3px var(--fa-primary-light);
+}
+
+.fa-input::placeholder {
+  color: var(--fa-text-muted);
+}
+
+.fa-input-group {
+  display: flex;
+  gap: var(--fa-space-3);
+  align-items: stretch;
+}
+
+.fa-input-group .fa-input {
+  flex: 1;
+}
