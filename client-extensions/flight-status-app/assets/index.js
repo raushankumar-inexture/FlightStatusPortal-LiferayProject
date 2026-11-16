@@ -1764,6 +1764,14 @@ class FlightStatusApp extends HTMLElement {
 		});
 	}
 
+	// Asks the server for a fresh read of one airport's board. The server starts it only when the last read is older than 2 minutes; asking here at most once a minute per airport.
+	touchBoard(code) {
+		const seen = this._touched = this._touched || {};
+		if (!code || (Date.now() - (seen[code] || 0)) < 60000) return;
+		seen[code] = Date.now();
+		this.json('/o/flight-feed/boards/refresh?airport=' + encodeURIComponent(code)).catch(() => {});
+	}
+
 	// The airports whose own board we read and how each is doing: [{airport, lastOk, stale, problem, rows}]. Cached for 30 seconds.
 	async boardHealth() {
 		if (!this._bh || (Date.now() - this._bh.at) > 30000) {
@@ -1790,6 +1798,7 @@ class FlightStatusApp extends HTMLElement {
 			tabs.innerHTML = boards.map((b) => `<button type="button" role="tab" class="fa-lbtab ${b.airportCode === st.code ? 'active' : ''}" data-c="${esc(b.airportCode)}"><b>${esc(b.airportCode)}</b><span>${esc(city(b.airportCode))}</span></button>`).join('') +
 				'<span class="fa-lbdir"><button type="button" class="' + (st.dir === 'A' ? 'active' : '') + '" data-d="A">Arrivals</button><button type="button" class="' + (st.dir === 'D' ? 'active' : '') + '" data-d="D">Departures</button></span>';
 			const from = new Date(new Date().toLocaleDateString('en-CA') + 'T00:00:00').getTime();
+			this.touchBoard(st.code);
 			let rows = [];
 			try { rows = await this.json('/o/flight-live/board?siteId=' + SITE_ID() + '&airport=' + st.code + '&dir=' + st.dir + '&from=' + from + '&to=' + (from + 86400000)); } catch (e) {}
 			const when = (r) => Date.parse(r.estimated || r.scheduled) || 0;
@@ -1891,6 +1900,7 @@ class FlightStatusApp extends HTMLElement {
 			const key = boardKey();
 			if (!key || (boardCache[key] && !force)) return;
 			const [code, dir, date] = key.split('|'), from = new Date(date + 'T00:00:00').getTime();
+			this.touchBoard(code);
 			try {
 				const rows = await this.json('/o/flight-live/board?siteId=' + SITE_ID() + '&airport=' + code + '&dir=' + dir + '&from=' + from + '&to=' + (from + 86400000));
 				boardCache[key] = rows.map((r) => boardToFlight(r, code, dir));

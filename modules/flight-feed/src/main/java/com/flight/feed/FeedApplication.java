@@ -139,8 +139,8 @@ public class FeedApplication extends Application {
 		// Every 2 minutes: the free live check of planes in the air.
 		_scheduler.scheduleWithFixedDelay(() -> _run("Live position check", this::_liveCheck), 1, 2, TimeUnit.MINUTES);
 
-		// The airport boards (arrivals and departures) are read every BOARD_INTERVAL_MINUTES (default 15).
-		_scheduler.scheduleWithFixedDelay(() -> _run("Airport boards", _boards::run), 2, Math.max(5, FeedSupport.number("BOARD_INTERVAL_MINUTES", 15)), TimeUnit.MINUTES);
+		// The airport boards (arrivals and departures) are read every BOARD_INTERVAL_MINUTES (default 5).
+		_scheduler.scheduleWithFixedDelay(() -> _run("Airport boards", _boards::run), 2, Math.max(5, FeedSupport.number("BOARD_INTERVAL_MINUTES", 5)), TimeUnit.MINUTES);
 
 		// Every 2 minutes: the provider sync, but only when the key is set and the wait time has passed (it uses the monthly calls).
 		_scheduler.scheduleWithFixedDelay(
@@ -160,6 +160,10 @@ public class FeedApplication extends Application {
 	protected void deactivate() {
 		if (_scheduler != null) {
 			_scheduler.shutdownNow();
+		}
+
+		if (_boards != null) {
+			_boards.stop();
 		}
 	}
 
@@ -216,7 +220,7 @@ public class FeedApplication extends Application {
 	public Response boards(@Context HttpServletRequest request) {
 		boolean admin = _admin(request) != null;
 		long now = System.currentTimeMillis();
-		long staleMinutes = FeedSupport.number("BOARD_STALE_MINUTES", 3 * Math.max(5, FeedSupport.number("BOARD_INTERVAL_MINUTES", 15)));
+		long staleMinutes = FeedSupport.number("BOARD_STALE_MINUTES", 3 * Math.max(5, FeedSupport.number("BOARD_INTERVAL_MINUTES", 5)));
 		long alertAfter = FeedSupport.number("BOARD_ALERT_FAILURES", 3);
 
 		JSONArray out = JSONFactoryUtil.createJSONArray();
@@ -240,6 +244,22 @@ public class FeedApplication extends Application {
 
 				out.put(o);
 			});
+
+		return Response.ok(out.toString()).build();
+	}
+
+	/**
+	 * A page that shows an airport's board asks for a fresh read of that airport. It starts a read in the background only when the last
+	 * one is older than BOARD_REFRESH_MINUTES (default 2), so many viewers never make many reads. The page picks up the new rows on its
+	 * next normal refresh.
+	 */
+	@GET
+	@Path("/boards/refresh")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response refreshBoard(@QueryParam("airport") String airport) {
+		JSONObject out = JSONFactoryUtil.createJSONObject();
+
+		out.put("started", _boards.refresh(airport));
 
 		return Response.ok(out.toString()).build();
 	}

@@ -118,7 +118,7 @@ final class BoardReader {
 		}
 	}
 
-	private void _saveStatus() {
+	private synchronized void _saveStatus() {
 		try {
 			JSONObject json = JSONFactoryUtil.createJSONObject();
 
@@ -178,12 +178,59 @@ final class BoardReader {
 	}
 
 	/** One round over every airport in boards.properties (or BOARD_AIRPORTS). A failing airport never stops the others. */
-	synchronized void run() throws Exception {
+	void run() throws Exception {
 		_loadConfig();
 
 		StringBuilder result = new StringBuilder();
 
 		for (String code : _codes()) {
+			result.append(_readOne(code));
+		}
+
+		_lastResult = Instant.now() + " " + result;
+
+		_cleanOld();
+	}
+
+	/**
+	 * Reads one airport now, in the background, when the page asks for it and the last read is older than
+	 * BOARD_REFRESH_MINUTES (default 2). Returns true when a read was started. This keeps the airport someone is looking at fresh
+	 * without reading every airport all the time.
+	 */
+	boolean refresh(String code) {
+		code = (code == null) ? "" : code.trim().toUpperCase();
+
+		if (!_codes().contains(code)) {
+			return false;
+		}
+
+		Status status = _status.computeIfAbsent(code, k -> new Status());
+
+		synchronized (status) {
+			if ((System.currentTimeMillis() - status.lastTry) < (FeedSupport.number("BOARD_REFRESH_MINUTES", 2) * 60_000L)) {
+				return false;
+			}
+
+			// Marked now, so two quick page requests start only one read.
+			status.lastTry = System.currentTimeMillis();
+		}
+
+		String airport = code;
+
+		_refresher.execute(() -> _readOne(airport));
+
+		return true;
+	}
+
+	void stop() {
+		_refresher.shutdownNow();
+	}
+
+	/** One airport, one read at a time (a round and a page request never read the same board together). Returns a line for the result text. */
+	private String _readOne(String code) {
+		Object lock = _locks.computeIfAbsent(code, k -> new Object());
+
+		synchronized (lock) {
 			Status status = _status.computeIfAbsent(code, k -> new Status());
 
 			status.lastTry = System.currentTimeMillis();
@@ -195,7 +242,7 @@ final class BoardReader {
 				status.failures = 0;
 				status.error = "";
 
-				result.append(code).append(' ').append(counts[0]).append(" new, ").append(counts[1]).append(" changed; ");
+				return code + ' ' + counts[0] + " new, " + counts[1] + " changed; ";
 			}
 			catch (Exception exception) {
 				status.failures++;
@@ -207,15 +254,12 @@ final class BoardReader {
 
 				_log.warn("Board " + code + " failed (" + status.failures + " in a row): " + exception);
 
-				result.append(code).append(" failed; ");
+				return code + " failed; ";
 			}
-
-			_saveStatus();
+			finally {
+				_saveStatus();
+			}
 		}
-
-		_lastResult = Instant.now() + " " + result;
-
-		_cleanOld();
 	}
 
 	/** {new, changed} */
@@ -502,7 +546,7 @@ final class BoardReader {
 		connection.setRequestProperty("Content-Type", "application/json");
 		connection.setRequestProperty("User-Agent", _AGENT);
 		connection.setConnectTimeout(15_000);
-		connection.setReadTimeout(40_000);
+		connection.setReadTimeout((int)(FeedSupport.number("BOARD_READ_TIMEOUT_SECONDS", 90) * 1000L));
 		connection.setDoOutput(true);
 
 		try (OutputStream out = connection.getOutputStream()) {
@@ -559,7 +603,19 @@ final class BoardReader {
 
 	private final Map<String, Status> _status = new java.util.concurrent.ConcurrentHashMap<>();
 
-	private final Map<String, String> _sources = new HashMap<>();
+	private final Map<String, String> _sources = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private final Map<String, Object> _locks = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private final java.util.concurrent.ExecutorService _refresher = java.util.concurrent.Executors.newFixedThreadPool(
+		2,
+		runnable -> {
+			Thread thread = new Thread(runnable, "flight-feed-board-refresh");
+
+			thread.setDaemon(true);
+
+			return thread;
+		});
 
 	private String _cleaned = "";
 
