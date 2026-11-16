@@ -803,71 +803,121 @@ public class BoardingApplication extends Application {
             ObjectEntry entry = (id == 0) ? null : _objectEntryLocalService.fetchObjectEntry(id);
 
             if ((entry == null) || (entry.getObjectDefinitionId() != _definition("C_BoardingPass").getObjectDefinitionId())) {
-                return Response.status(404).header("Cache-Control", "no-store").entity(_checkPage(false, "")).build();
+                return Response.status(404).header("Cache-Control", "no-store").entity(
+                    PassPage.message(
+                        "invalid", "Not a valid boarding pass", "This code is not a real boarding pass, or it was changed after it was made.",
+                        new String[] {
+                            "Ask the passenger to open their boarding pass in the Flight Status Portal.", "Scan the new QR code again.",
+                            "If it still fails, send the passenger to the airline desk."
+                        })).build();
             }
 
             Map<String, Serializable> v = entry.getValues();
 
             ObjectEntry flight = _findFlight(entry.getGroupId(), String.valueOf(v.get("flightNumber")), String.valueOf(v.get("flightId")));
+            Map<String, Serializable> f = (flight == null) ? new HashMap<>() : flight.getValues();
 
-            String status = "";
+            String flightStatus = _clean(f.get("showstatus"));
+            int delay = 0;
 
-            if (flight != null) {
-                status = String.valueOf(flight.getValues().get("showstatus")).replaceAll("([a-z])([A-Z])", "$1 $2");
-
-                Object delay = flight.getValues().get("delayMinutes");
-
-                if ((delay != null) && !"0".equals(String.valueOf(delay))) {
-                    status += ", +" + delay + " min";
-                }
+            try {
+                delay = Integer.parseInt(_clean(f.get("delayMinutes")));
+            }
+            catch (NumberFormatException numberFormatException) {
             }
 
             String[] names = String.valueOf(v.get("passengerName")).trim().split("\\s+");
             String shortName = (names.length > 1) ? names[0] + " " + names[names.length - 1].charAt(0) + "." : names[0];
 
-            Object time = v.get("departureTime");
-            String iso = "";
+            // The flight's own time when we have it (it moves with a delay), else the time saved on the pass.
+            Object time = (f.get("departureTime") instanceof Date) ? f.get("departureTime") : v.get("departureTime");
+            long departs = (time instanceof Date) ? ((Date)time).getTime() : 0;
 
-            if (time instanceof Date) {
-                SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+            Map<String, String> d = new HashMap<>();
 
-                format.setTimeZone(TimeZone.getTimeZone("UTC"));
+            d.put("name", shortName);
+            d.put("pnr", _clean(v.get("pnr")));
+            d.put("flightNumber", _clean(v.get("flightNumber")));
+            d.put("airline", _clean(f.get("airline")));
+            d.put("origin", _clean(v.get("origin")));
+            d.put("originCity", _clean(v.get("originCity")));
+            d.put("destination", _clean(v.get("destination")));
+            d.put("destinationCity", _clean(v.get("destinationCity")));
+            d.put("departIso", _iso(departs));
+            d.put("boardingIso", _iso(departs - (45 * 60_000L)));
+            d.put("gate", _clean(v.get("gate")));
+            d.put("seat", _clean(v.get("seat")));
+            d.put("terminal", _clean(f.get("depTerminal")));
+            d.put("boardedIso", _clean(v.get("boardedAt")));
 
-                iso = format.format((Date)time);
+            String travelClass = _clean(v.get("travelClass"));
+
+            d.put("travelClass", travelClass.isEmpty() ? "Economy" : travelClass);
+
+            String baggage = _clean(v.get("baggageKg"));
+            String meal = _clean(v.get("meal"));
+
+            d.put("baggage", "0".equals(baggage) ? "" : baggage);
+            d.put("meal", meal.isEmpty() ? "" : "veg".equals(meal) ? "Vegetarian meal" : "nonveg".equals(meal) ? "Non-vegetarian meal" : "Snack box");
+
+            // What the flight is doing, in words and colour.
+            String statusText = "Not available", statusClass = "";
+
+            if ("Cancelled".equals(flightStatus)) {
+                statusText = "Cancelled";
+                statusClass = "cancelled";
+            }
+            else if ("Delayed".equals(flightStatus) || (delay > 0)) {
+                statusText = (delay > 0) ? "Delayed +" + delay + " min" : "Delayed";
+                statusClass = "delayed";
+            }
+            else if ("OnTime".equals(flightStatus)) {
+                statusText = "On time";
+                statusClass = "ontime";
+            }
+            else if ("Boarding".equals(flightStatus)) {
+                statusText = "Boarding";
+            }
+            else if ("Departed".equals(flightStatus) || "Landed".equals(flightStatus)) {
+                statusText = flightStatus;
+                statusClass = "done";
             }
 
-            StringBuilder rows = new StringBuilder();
+            d.put("statusText", statusText);
+            d.put("statusClass", statusClass);
 
-            _row(rows, "Passenger", HtmlUtil.escape(shortName));
-            _row(rows, "Flight", HtmlUtil.escape(String.valueOf(v.get("flightNumber"))));
-            _row(rows, "Route", HtmlUtil.escape(v.get("origin") + " \u2192 " + v.get("destination")));
-            _row(rows, "Departs", "<time datetime=\"" + iso + "\">" + HtmlUtil.escape(iso) + "</time>");
-            _row(rows, "Gate", HtmlUtil.escape(String.valueOf(v.get("gate"))));
-            _row(rows, "Seat", HtmlUtil.escape(String.valueOf(v.get("seat"))));
-            String travelClass = String.valueOf(v.get("travelClass"));
+            boolean left = "Departed".equals(flightStatus) || "Landed".equals(flightStatus) || ((departs > 0) && (departs < (System.currentTimeMillis() - (3 * 3_600_000L))));
 
-            _row(rows, "Class", HtmlUtil.escape((travelClass.isEmpty() || "null".equals(travelClass)) ? "Economy" : travelClass));
-            _row(rows, "Flight status", HtmlUtil.escape(status.isEmpty() ? "Not available" : status));
+            d.put("state", "Cancelled".equals(flightStatus) ? "cancelled" : !d.get("boardedIso").isEmpty() ? "boarded" : left ? "departed" : "valid");
 
-            String baggage = String.valueOf(v.get("baggageKg")).replace("null", "");
-            String mealCode = String.valueOf(v.get("meal")).replace("null", "");
-
-            if (!baggage.isEmpty()) {
-                _row(rows, "Extra baggage", "+" + HtmlUtil.escape(baggage) + " kg");
-            }
-
-            if (!mealCode.isEmpty()) {
-                _row(rows, "Meal", HtmlUtil.escape("veg".equals(mealCode) ? "Vegetarian" : "nonveg".equals(mealCode) ? "Non-vegetarian" : "Snack box"));
-            }
-
-            return Response.ok(_checkPage(true, rows.toString())).header("Cache-Control", "no-store").build();
+            return Response.ok(PassPage.pass(d)).header("Cache-Control", "no-store").build();
         }
         catch (Exception exception) {
             _log.error("Could not check the boarding pass", exception);
 
-            return Response.status(500).entity(_checkPage(false, "")).build();
+            return Response.status(500).header("Cache-Control", "no-store").entity(
+                PassPage.message(
+                    "problem", "We could not check this pass", "Something went wrong on our side. This does not mean the pass is fake.",
+                    new String[] {"Wait a moment and scan the QR code again.", "If it still fails, check the pass at the airline desk."})).build();
         }
     }
+
+    private static String _clean(Object value) {
+        return (value == null) ? "" : String.valueOf(value).replace("null", "").trim();
+    }
+
+    private static String _iso(long millis) {
+        if (millis <= 0) {
+            return "";
+        }
+
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+        format.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+        return format.format(new Date(millis));
+    }
+
 
     /** Gate staff (administrators only): the full details of a scanned boarding pass. */
     @GET
@@ -986,24 +1036,6 @@ public class BoardingApplication extends Application {
         catch (Exception exception) {
             return null;
         }
-    }
-
-    private static void _row(StringBuilder rows, String label, String value) {
-        rows.append("<div class=\"row\"><span>").append(label).append("</span><b>").append(value).append("</b></div>");
-    }
-
-    private static String _checkPage(boolean valid, String rows) {
-        return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
-            "<meta name=\"robots\" content=\"noindex\"><title>Boarding pass check</title><style>" +
-            "body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:#eef3ff;color:#0f1e50;padding:1rem}" +
-            ".card{max-width:460px;margin:2rem auto;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(15,30,80,.15);overflow:hidden}" +
-            ".top{padding:1.2rem 1.4rem;color:#fff;background:" + (valid ? "#1f9d55" : "#d64545") + ";font-size:1.25rem;font-weight:700}" +
-            ".top small{display:block;font-weight:400;opacity:.9;margin-top:.25rem;font-size:.9rem}" +
-            ".row{display:flex;justify-content:space-between;gap:1rem;padding:.8rem 1.4rem;border-top:1px solid #eef1f8}" +
-            ".row span{color:#6b7790}.note{padding:1rem 1.4rem;color:#6b7790;font-size:.85rem}</style></head><body><div class=\"card\">" +
-            (valid ? "<div class=\"top\">&#10003; Valid boarding pass<small>Flight Status Portal</small></div>" + rows + "<div class=\"note\">Times are shown in your phone's time zone.</div>" :
-                "<div class=\"top\">&#10007; Invalid boarding pass<small>This code is not a real pass, or it was changed.</small></div><div class=\"note\">Ask the passenger to open their boarding pass again.</div>") +
-            "</div><script>document.querySelectorAll('time').forEach(function(t){var d=new Date(t.getAttribute('datetime'));if(!isNaN(d))t.textContent=d.toLocaleString([],{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})})</script></body></html>";
     }
 
     /** The address people reach the site at: bundles/data/public-url.txt if it exists, otherwise the address of this request. */

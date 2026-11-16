@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0b1a45">
+<title>{{title}}</title>
+<style>
+:root{color-scheme:light dark;--ink:#0f172a;--text:#334155;--muted:#64748b;--line:#e2e8f0;--card:#fff;--soft:#f1f5f9;--bg:#e9efff;--blue:#0b5fff;--gold:#ffb800}
+@media (prefers-color-scheme:dark){:root{--ink:#f1f5f9;--text:#cbd5e1;--muted:#94a3b8;--line:#334155;--card:#1e293b;--soft:#0f172a;--bg:#0b1220}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:max(1rem,env(safe-area-inset-top)) 1rem 2rem;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--text);background:radial-gradient(900px 420px at 50% -120px,#c9d8ff,transparent),var(--bg);-webkit-font-smoothing:antialiased}
+.pass{width:100%;max-width:440px;margin:1.25rem auto;background:var(--card);border-radius:26px;box-shadow:0 24px 60px rgba(15,30,80,.22);overflow:hidden}
+.head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:1rem 1.25rem;color:#fff;background:linear-gradient(120deg,#0b1a45,#1b3a8a 70%,#2b5fd9)}
+.brand{display:flex;align-items:center;gap:.65rem;font-weight:700;letter-spacing:-.01em}
+.brand b{color:var(--gold)}
+.logo{display:grid;place-items:center;width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#2b7bff,#0b5fff);box-shadow:0 4px 12px rgba(11,95,255,.5)}
+.logo svg{width:20px;height:20px;fill:#fff}
+.seal{display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .7rem;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.banner{display:flex;align-items:center;gap:.7rem;padding:.85rem 1.25rem;font-weight:700}
+.banner .ico{display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;color:#fff;font-size:1rem}
+.banner small{display:block;margin-top:.1rem;font-weight:500;font-size:.82rem;opacity:.85}
+.valid .banner{background:#e6f6ee;color:#0b7a43}.valid .ico{background:#0f9d58}
+.boarded .banner{background:#e8f0fe;color:#0848c7}.boarded .ico{background:#0b5fff}
+.cancelled .banner,.invalid .banner{background:#fdecea;color:#b3261e}.cancelled .ico,.invalid .ico{background:#d93025}
+.departed .banner{background:#eef1f5;color:#475569}.departed .ico{background:#64748b}
+.problem .banner{background:#fff4d6;color:#8a5a00}.problem .ico{background:#e0a800}
+@media (prefers-color-scheme:dark){.valid .banner{background:#0f2e22;color:#6ee7a8}.boarded .banner{background:#10244d;color:#8db4ff}.cancelled .banner,.invalid .banner{background:#3a1512;color:#ff9a92}.departed .banner{background:#1e293b;color:#cbd5e1}.problem .banner{background:#3a2c08;color:#fcd34d}}
+.route{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem;padding:1.5rem 1.25rem .5rem}
+.end.right{text-align:right}
+.code{display:block;color:var(--ink);font-size:2.7rem;font-weight:800;line-height:1;letter-spacing:-.03em}
+.city{display:block;margin-top:.35rem;color:var(--muted);font-size:.9rem}
+.way{display:flex;align-items:center;gap:.35rem;min-width:70px}
+.way i{flex:1;height:0;border-top:2px dashed var(--line)}
+.way svg{width:22px;height:22px;fill:var(--blue);transform:rotate(90deg)}
+.meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem;padding:.4rem 1.25rem 1.1rem;font-size:.9rem;color:var(--muted)}
+.meta b{color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.cell{padding:.85rem 1rem;background:var(--card)}
+.cell small{display:block;margin-bottom:.15rem;color:var(--muted);font-size:.68rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.cell b{color:var(--ink);font-size:1.2rem;font-weight:700}
+.cell.big b{font-size:2rem;letter-spacing:-.02em}
+.cell.wide{grid-column:span 2}
+.status{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.25rem}
+.pill{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .8rem;border-radius:999px;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:#e8f0fe;color:#0848c7}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ontime{background:#e6f6ee;color:#0b7a43}.pill.delayed{background:#fff4d6;color:#8a5a00}.pill.cancelled{background:#fdecea;color:#b3261e}.pill.done{background:#eef1f5;color:#475569}
+@media (prefers-color-scheme:dark){.pill.ontime{background:#0f2e22;color:#6ee7a8}.pill.delayed{background:#3a2c08;color:#fcd34d}.pill.cancelled{background:#3a1512;color:#ff9a92}.pill.done{background:#334155;color:#cbd5e1}.pill{background:#10244d;color:#8db4ff}}
+.tear{position:relative;margin:0 1.25rem;border-top:2px dashed var(--line)}
+.tear::before,.tear::after{content:"";position:absolute;top:-13px;width:24px;height:24px;border-radius:50%;background:var(--bg)}
+.tear::before{left:-2.1rem}.tear::after{right:-2.1rem}
+.foot{display:grid;grid-template-columns:1fr auto;gap:.9rem 1rem;padding:1.2rem 1.25rem 1rem}
+.foot small{display:block;color:var(--muted);font-size:.68rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.foot b{display:block;color:var(--ink);font-size:1.05rem}
+.foot .pnr{text-align:right;font-variant-numeric:tabular-nums;letter-spacing:.08em}
+.tags{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.4rem}
+.tag{padding:.25rem .7rem;border-radius:999px;background:var(--soft);color:var(--text);font-size:.8rem;font-weight:600}
+.note{padding:.9rem 1.25rem 1.2rem;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem;line-height:1.5}
+.note b{color:var(--ink)}
+.help{margin:0;padding:.2rem 1.25rem 1.3rem 2.4rem;color:var(--text);line-height:1.6}
+.msg{margin:0;padding:1.2rem 1.25rem .6rem;color:var(--text);line-height:1.55}
+.powered{max-width:440px;margin:.5rem auto 0;text-align:center;color:var(--muted);font-size:.78rem}
+@media print{body{background:#fff;padding:0}.pass{box-shadow:none;border:1px solid #ccc;max-width:none}.powered{display:none}}
+</style>
+</head>
+<body>
+<main class="pass {{state}}">
+{{body}}
+</main>
+<p class="powered">Flight Status Portal &middot; boarding pass check</p>
+<script>
+document.querySelectorAll('time[data-f]').forEach(function(t){var d=new Date(t.getAttribute('datetime'));if(isNaN(d))return;var f=t.getAttribute('data-f');
+t.textContent=f==='time'?d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):f==='date'?d.toLocaleDateString([],{weekday:'short',day:'numeric',month:'short',year:'numeric'}):d.toLocaleString([],{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});});
+var c=document.getElementById('checked');if(c)c.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+</script>
+</body>
+</html>
