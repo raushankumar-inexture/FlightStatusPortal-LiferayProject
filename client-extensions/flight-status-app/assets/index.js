@@ -579,7 +579,8 @@ class FlightStatusApp extends HTMLElement {
 	}
 
 	legalLinks() {
-		return ['privacy', 'terms', 'cookies'].map((k) => `<button type="button" class="fa-legal" data-legal="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('');
+		const labels = {privacy: 'Privacy', terms: 'Terms', cookies: 'Cookies', photos: 'Photo credits'};
+		return Object.keys(labels).map((k) => `<button type="button" class="fa-legal" data-legal="${k}">${labels[k]}</button>`).join('');
 	}
 
 	// The page footer: one column for each menu group, one for the signed-in user's pages, one for the legal links.
@@ -593,7 +594,7 @@ class FlightStatusApp extends HTMLElement {
 			`<div class="fa-footbrand"><a class="fa-brand" href="${root}/home"><span class="fa-logo">${ICONS.plane}</span>Flight Status <b>Portal</b></a><p>Live flight information for every airport we cover.</p></div>` +
 			col('Explore', routes.filter((r) => !r.group).map(link)) + groups.map((g) => col(g, routes.filter((r) => r.group === g).map(link))).join('') +
 			col('Help', ROUTES.filter((r) => r.help).map((r) => `<a href="${root}/${r.slug}">${esc(r.help[0])}</a>`)) + col('My account', mine.map(link)) + col('Legal', this.legalLinks().split('</button>').filter(Boolean).map((b) => b + '</button>')) +
-			'</div><div class="fa-footbar"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span><span>Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons</span></div>';
+			'</div><div class="fa-footbar"><span>&copy; ' + new Date().getFullYear() + ' Flight Status Portal</span></div>';
 	}
 
 	bindShell() {
@@ -637,6 +638,10 @@ class FlightStatusApp extends HTMLElement {
 			terms: ['Terms of use', '<p>Flight information, live aircraft positions and routes are shown for convenience and can be late, incomplete or wrong. Always confirm times, gates and check-in with your airline before you travel.</p><p>Boarding passes created in this portal are for information only. Use your airline\'s own pass at the airport.</p><p>Please keep your login details private. You are responsible for activity on your account.</p>'],
 			cookies: ['Cookies and storage', '<p><b>Essential cookie:</b> a session cookie keeps you signed in until you log out.</p><p><b>Browser storage:</b> we remember that you read this notice, your chosen view in some pages, and the addresses of city photos so pages load faster.</p><p>We do not set advertising or analytics cookies.</p>'],
 		};
+		// Photographers and licences of the pictures (page photos are listed in HERO_PHOTOS, transport photos in assets/guide/credits.json).
+		pages.photos = ['Photo credits', '<p>The pictures on this site are free-licence photos from Wikipedia and Wikimedia Commons. Thank you to the photographers.</p><h3>Page and banner photos</h3><p>' +
+			[...new Set(HERO_PHOTOS.map((x) => x[1] + ' (' + x[2] + ')'))].map(esc).join(', ') + '.</p><h3>Transport photos</h3><ul class="fa-credits"><li>Loading...</li></ul>' +
+			'<h3>City photos</h3><p>The city pictures on the Airports page come from Wikipedia. Each one belongs to its photographer under a free licence.</p>'];
 		const [title, body] = pages[kind];
 		const modal = document.createElement('div');
 		modal.className = 'fa-modal';
@@ -645,6 +650,13 @@ class FlightStatusApp extends HTMLElement {
 		const close = () => modal.remove();
 		modal.querySelector('button').addEventListener('click', close);
 		modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+		if (kind === 'photos') {
+			this._guideCredits = this._guideCredits || this.json('/o/flight-status-app/guide/credits.json').catch(() => ({}));
+			this._guideCredits.then((c) => {
+				const list = modal.querySelector('.fa-credits');
+				if (list) list.innerHTML = Object.entries(c).map(([name, credit]) => '<li><b>' + esc(name.replace(/-/g, ' ')) + ':</b> ' + esc(credit) + '</li>').join('') || '<li>No credits listed.</li>';
+			});
+		}
 	}
 
 	async isAdmin() {
@@ -1482,7 +1494,6 @@ class FlightStatusApp extends HTMLElement {
 	// Login and Register share one look: an aircraft or airport picture beside the form. The photographer is named in the footer and in a hover text, not on the picture.
 	authShell(title, cardTitle, subtitle, formHtml, altHtml) {
 		const photo = this.authPhoto();
-		Promise.resolve().then(() => { const credit = this.querySelector('.fa-footbar span:last-child'); if (credit) credit.textContent = 'Photo: ' + photo.credit; });
 		return '<div class="fa-authpage has-photo" title="Photo: ' + esc(photo.credit) + '" style="background-image: linear-gradient(180deg, rgba(12,34,92,.50), rgba(8,18,50,.84)), url(\'/o/flight-status-app/hero/' + esc(photo.file) + '\')"><div class="fa-authwrap">' +
 			'<h1 class="fa-authtitle">' + title + '</h1>' +
 			'<section class="fa-authcard2"><header>' + cardTitle + '</header><div class="fa-authbody">' + (subtitle ? '<p class="fa-authsub">' + subtitle + '</p>' : '') + formHtml + altHtml + '</div></section>' +
