@@ -1909,6 +1909,7 @@ class FlightStatusApp extends HTMLElement {
 		const boardNote = () => {
 			const a = ap[st.airport], late = staleBoard();
 			if (late) return '<p class="fa-panelnote fa-stale">The airport\'s own board has not updated since ' + esc(clock(late.lastOk)) + ', so this list comes from our backup data and may be incomplete.</p>';
+			if (a && !boardCodes.has(a.code) && !boardRows()) return '<p class="fa-panelnote">We do not have a live board for this airport yet. The flights below come from our flight feed and may be incomplete.</p>';
 			return boardRows() ? '<p class="fa-panelnote">Live from the airport\'s own board' + (a && boardInfo[a.code] && Number(boardInfo[a.code].lastOk) ? ' &middot; updated ' + esc(clock(boardInfo[a.code].lastOk)) : '') + '</p>' : '';
 		};
 		const boardRows = () => { const rows = boardCache[boardKey()]; return rows && rows.length ? rows : null; };
@@ -2289,9 +2290,11 @@ class FlightStatusApp extends HTMLElement {
 		const [ap, flights, guides, boards] = await Promise.all([this.airports(), this.flights(), this.guideRows(), this.boardHealth()]);
 		const boardCodes = new Set(boards.filter((b) => !b.stale).map((b) => b.airport));
 		const list = Object.values(ap);
-		const count = (id) => flights.filter((f) => f.originAirportId == id || f.destinationAirportId == id).length;
+		// Only flights that leave or arrive today (this used to count flights of every date and still say "today").
+		const today = new Date().toLocaleDateString('en-CA'), dayOf = (v) => (v ? new Date(v).toLocaleDateString('en-CA') : '');
+		const count = (id) => flights.filter((f) => (f.originAirportId == id || f.destinationAirportId == id) && (dayOf(f.departureTime) === today || dayOf(f.arrivalTime) === today)).length;
 		view.innerHTML = '<div class="fa-title"><h1>Airports</h1><p>' + list.length + ' airports in our network.</p></div><div class="fa-grid">' +
-			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-name="${esc(a.name)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span>${boardCodes.has(a.code) ? `<a class="fa-livetag" href="${this._root}/flight-status?airport=${esc(a.code)}&dir=arr">Live arrivals &amp; departures</a>` : `<small>${count(a.id) ? count(a.id) + ' flights today' : 'No flights today'}</small>`}${this.guideButton(a, guides, 'To and from the airport')}</div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div>';
+			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-name="${esc(a.name)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span>${boardCodes.has(a.code) ? `<a class="fa-livetag" href="${this._root}/flight-status?airport=${esc(a.code)}&dir=arr">Live arrivals &amp; departures</a>` : `<small>${count(a.id) ? count(a.id) + (count(a.id) === 1 ? ' flight today' : ' flights today') : 'No live data for this airport yet'}</small>`}${this.guideButton(a, guides, 'To and from the airport')}</div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div>';
 		fillAllPhotos(view);
 		this.setupFilter(view, {key: 'airports', items: '.fa-card', placeholder: 'Search airport code, name, city or country'});
 	}
