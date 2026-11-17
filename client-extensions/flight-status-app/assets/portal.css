@@ -437,3 +437,9 @@ flight-status-app .fa-fsresults > .fa-panelnote.fa-stale::before { background: #
 flight-status-app .fa-legalbox { max-height: 85vh; overflow-y: auto; }
 flight-status-app .fa-legalbox h3 { margin: 1.1rem 0 .3rem; font-size: 1rem; font-weight: 700; }
 flight-status-app .fa-legalbox .fa-credits { margin: 0; padding-left: 1.2rem; color: var(--p-text); }
+
+/* Several passengers on one booking code */
+flight-status-app .fa-party{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:0 0 1rem}
+flight-status-app .fa-party span{font-weight:700}
+flight-status-app .fa-party .fa-chip.active{background:#0b5fff;border-color:#0b5fff;color:#fff}
+flight-status-app .fa-party .fa-chip[disabled]{opacity:.6;cursor:default}

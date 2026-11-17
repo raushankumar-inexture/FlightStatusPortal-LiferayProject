@@ -4,10 +4,13 @@ import com.liferay.object.model.ObjectDefinition;
 import com.liferay.object.model.ObjectEntry;
 import com.liferay.object.service.ObjectDefinitionLocalService;
 import com.liferay.object.service.ObjectEntryLocalService;
+import com.liferay.petra.lang.SafeCloseable;
+import com.liferay.portal.kernel.json.JSONArray;
 import com.liferay.portal.kernel.json.JSONFactoryUtil;
 import com.liferay.portal.kernel.json.JSONObject;
 import com.liferay.portal.kernel.log.Log;
 import com.liferay.portal.kernel.log.LogFactoryUtil;
+import com.liferay.portal.kernel.security.auth.CompanyThreadLocal;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.service.UserLocalServiceUtil;
 import com.liferay.portal.kernel.util.PortalUtil;
@@ -269,6 +272,13 @@ final class BoardReader {
 		ZonedDateTime now = ZonedDateTime.now(zone);
 		LocalDate today = now.toLocalDate();
 
+		// Airports with their own board system (type in boards.properties); the default is the Adani board system below.
+		String type = _config.getProperty("airport." + code + ".type", "adani");
+
+		if (!"adani".equals(type)) {
+			return _readOther(code, status, base, type, today, zone);
+		}
+
 		// The whole day on the first round and once each new day; afterwards only the slots around now.
 		Set<String> slots = new LinkedHashSet<>();
 
@@ -313,6 +323,107 @@ final class BoardReader {
 		status.rows = (slots.size() == 4) ? read : Math.max(status.rows, read);
 
 		return new int[] {created, changed};
+	}
+
+	/** Airports that give the whole day in one answer (Delhi: type dial, Hyderabad: type hyderabad). {new, changed} */
+	private int[] _readOther(String code, Status status, String base, String type, LocalDate today, ZoneId zone) throws Exception {
+		int created = 0, changed = 0, read = 0;
+
+		for (String direction : new String[] {"A", "D"}) {
+			List<Map<String, String>> rows = "dial".equals(type) ? _delhiRows(base, direction) : _hyderabadRows(base, direction);
+
+			for (Map<String, String> row : rows) {
+				read++;
+
+				int result = _save(code, direction, today, zone, row);
+
+				if (result == 1) {
+					created++;
+				}
+				else if (result == 2) {
+					changed++;
+				}
+			}
+		}
+
+		if (read == 0) {
+			throw new IllegalStateException("The board returned no flights (the page may have changed)");
+		}
+
+		status.fullDay = today.toString();
+		status.rows = read;
+
+		return new int[] {created, changed};
+	}
+
+	/** Delhi: one answer per direction and flight kind (D = domestic, I = international). It has the city name but no airport code and no estimated time, only a status text. */
+	private List<Map<String, String>> _delhiRows(String base, String direction) throws Exception {
+		List<Map<String, String>> rows = new ArrayList<>();
+
+		for (String kind : new String[] {"D", "I"}) {
+			JSONArray list = JSONFactoryUtil.createJSONArray(
+				_get(base + "/dial-api/flight-info/flight/" + ("A".equals(direction) ? "arrival" : "departure") + "?FltWay=" + kind + "&Terminal=&search=&loadMore=true"));
+
+			for (int i = 0; i < list.length(); i++) {
+				JSONObject o = list.getJSONObject(i);
+				Map<String, String> row = new HashMap<>();
+
+				row.put("day", o.getString("FLIGHTDATE"));
+				row.put("keyPart", o.getString("AIRPORT_DESCRIPTION").replaceAll("\\W", ""));
+				row.put("scheduled", o.getString("SCHEDULED_TIME"));
+				row.put("estimated", "");
+				row.put("airline", o.getString("airline_name"));
+				row.put("otherCity", o.getString("AIRPORT_DESCRIPTION"));
+				row.put("otherCode", "");
+				row.put("flightNumber", o.getString("FLIGHTNUMBER").replaceAll("\\s+", ""));
+				row.put("terminal", o.getString("terminal").replaceFirst("^T(?=\\d)", ""));  // the page adds the T itself
+				row.put("spot", o.getString("GATE_BELT").replaceAll("[_-]+", ""));
+				row.put("status", o.getString("FLIGHT_STATUS_DESCRIPTION"));
+
+				rows.add(row);
+
+				Thread.sleep(0);
+			}
+
+			Thread.sleep(1200);
+		}
+
+		return rows;
+	}
+
+	/** Hyderabad: one answer per direction with scheduled, estimated and actual times (yyyyMMddHHmmss), the other airport's code and a status word. */
+	private List<Map<String, String>> _hyderabadRows(String base, String direction) throws Exception {
+		boolean arrivals = "A".equals(direction);
+		List<Map<String, String>> rows = new ArrayList<>();
+
+		JSONArray list = JSONFactoryUtil.createJSONObject(_get(base + "/next-api/flights?type=" + (arrivals ? "arrivals" : "departures") + "&flightType=all&limit=2000")).getJSONArray("data");
+
+		for (int i = 0; i < list.length(); i++) {
+			JSONObject o = list.getJSONObject(i);
+			String scheduled = o.getString("rawScheduledTime");
+			String estimated = o.getString("rawEstimatedTime").isEmpty() ? o.getString("rawActualTime") : o.getString("rawEstimatedTime");
+
+			if (scheduled.length() < 12) {
+				continue;
+			}
+
+			Map<String, String> row = new HashMap<>();
+
+			row.put("day", scheduled.substring(0, 4) + "-" + scheduled.substring(4, 6) + "-" + scheduled.substring(6, 8));
+			row.put("scheduled", scheduled.substring(8, 10) + ":" + scheduled.substring(10, 12));
+			row.put("estimated", (estimated.length() < 12) ? "" : estimated.substring(8, 10) + ":" + estimated.substring(10, 12));
+			row.put("airline", o.getString("airlineName"));
+			row.put("otherCity", o.getString(arrivals ? "originCity" : "destinationCity"));
+			row.put("otherCode", o.getString(arrivals ? "origin" : "destination"));
+			row.put("flightNumber", o.getString("flightNumber").replaceAll("\\s+", ""));
+			row.put("terminal", "");
+			row.put("spot", o.getString(arrivals ? "belt" : "gate"));
+			row.put("status", o.getString("statusDescription"));
+
+			rows.add(row);
+		}
+
+		return rows;
 	}
 
 	/** All the pages of one time slot of one board. */
@@ -419,7 +530,10 @@ final class BoardReader {
 
 	/** 1 = created, 2 = changed, 0 = the same. */
 	private int _save(String code, String direction, LocalDate day, ZoneId zone, Map<String, String> row) throws Exception {
-		Date scheduled = _at(day, row.get("scheduled"), zone, null);
+		// Some boards give the day with every row; the Adani boards are read one day at a time.
+		LocalDate rowDay = row.containsKey("day") ? LocalDate.parse(row.get("day")) : day;
+
+		Date scheduled = _at(rowDay, row.get("scheduled"), zone, null);
 
 		if (scheduled == null) {
 			return 0;
@@ -435,7 +549,7 @@ final class BoardReader {
 		values.put("otherCity", row.get("otherCity"));
 		values.put("scheduled", scheduled);
 
-		Date estimated = row.get("estimated").isEmpty() ? null : _at(day, row.get("estimated"), zone, scheduled);
+		Date estimated = row.get("estimated").isEmpty() ? null : _at(rowDay, row.get("estimated"), zone, scheduled);
 
 		if (estimated != null) {
 			values.put("estimated", estimated);
@@ -445,7 +559,8 @@ final class BoardReader {
 		values.put("spot", row.get("spot"));
 		values.put("statusText", row.get("status"));
 
-		String key = code + "|" + direction + "|" + day + "|" + row.get("flightNumber") + "|" + row.get("scheduled");
+		// The row is known by its flight and its time; Delhi moves the time when a flight is late, so there the other city is used instead of the time.
+		String key = code + "|" + direction + "|" + rowDay + "|" + row.get("flightNumber") + "|" + (row.containsKey("keyPart") ? row.get("keyPart") : row.get("scheduled"));
 		long siteId = FeedSupport.siteId();
 		long companyId = PortalUtil.getDefaultCompanyId();
 		ObjectDefinition definition = _definitions.getObjectDefinition(companyId, "C_BoardFlight");
@@ -467,7 +582,7 @@ final class BoardReader {
 		Map<String, Serializable> old = existing.getValues();
 		boolean same = true;
 
-		for (String name : new String[] {"terminal", "spot", "statusText", "airline", "otherCity", "otherCode"}) {
+		for (String name : new String[] {"scheduled", "terminal", "spot", "statusText", "airline", "otherCity", "otherCode"}) {
 			same &= String.valueOf(values.get(name)).equals(String.valueOf(old.get(name)));
 		}
 
@@ -539,6 +654,22 @@ final class BoardReader {
 		}
 	}
 
+	private static String _get(String address) throws Exception {
+		HttpURLConnection connection = (HttpURLConnection)new URL(address).openConnection();
+
+		connection.setRequestProperty("User-Agent", _AGENT);
+		connection.setRequestProperty("Accept", "application/json");
+		connection.setConnectTimeout(15_000);
+		connection.setReadTimeout((int)(FeedSupport.number("BOARD_READ_TIMEOUT_SECONDS", 90) * 1000L));
+
+		try (InputStream in = connection.getInputStream()) {
+			return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+		}
+		finally {
+			connection.disconnect();
+		}
+	}
+
 	private static String _post(String address, String json) throws Exception {
 		HttpURLConnection connection = (HttpURLConnection)new URL(address).openConnection();
 
@@ -561,7 +692,10 @@ final class BoardReader {
 		}
 	}
 
-	/** Once a day: remove board rows older than 3 days. */
+	/**
+	 * Once a day: remove board rows older than 3 days, in chunks so any number of rows is cleaned. The delete needs the company set
+	 * (a background thread has none, and Liferay then fails with "Feature flag ... is not available for company 0").
+	 */
 	private void _cleanOld() throws Exception {
 		String today = LocalDate.now().toString();
 
@@ -569,22 +703,41 @@ final class BoardReader {
 			return;
 		}
 
-		_cleaned = today;
-
 		long companyId = PortalUtil.getDefaultCompanyId();
 		ObjectDefinition definition = _definitions.getObjectDefinition(companyId, "C_BoardFlight");
 		long limit = System.currentTimeMillis() - (3 * 86_400_000L);
-		int removed = 0;
+		int removed = 0, start = 0, chunk = 2000;
 
-		for (ObjectEntry entry : _entries.getObjectEntries(FeedSupport.siteId(), definition.getObjectDefinitionId(), 0, 5000)) {
-			Object scheduled = entry.getValues().get("scheduled");
+		try (SafeCloseable closeable = CompanyThreadLocal.setCompanyIdWithSafeCloseable(companyId)) {
+			while (true) {
+				List<ObjectEntry> rows = _entries.getObjectEntries(FeedSupport.siteId(), definition.getObjectDefinitionId(), start, start + chunk);
 
-			if ((scheduled instanceof Date) && (((Date)scheduled).getTime() < limit)) {
-				_entries.deleteObjectEntry(entry);
+				if (rows.isEmpty()) {
+					break;
+				}
 
-				removed++;
+				int kept = 0;
+
+				for (ObjectEntry entry : rows) {
+					Object scheduled = entry.getValues().get("scheduled");
+
+					if ((scheduled instanceof Date) && (((Date)scheduled).getTime() < limit)) {
+						_entries.deleteObjectEntry(entry);
+
+						removed++;
+					}
+					else {
+						kept++;
+					}
+				}
+
+				// Deleted rows are gone from the list, so only the kept ones move the start.
+				start += kept;
 			}
 		}
+
+		// Marked as done only when it worked, so a failure is tried again in the next round.
+		_cleaned = today;
 
 		if (removed > 0) {
 			_log.info("Boards: removed " + removed + " old rows");

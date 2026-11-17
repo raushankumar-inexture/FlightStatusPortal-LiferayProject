@@ -51,6 +51,7 @@ import java.security.SecureRandom;
 
 import java.text.SimpleDateFormat;
 
+import java.util.ArrayList;
 import java.util.Base64;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -263,14 +264,14 @@ public class BoardingApplication extends Application {
     @Produces(MediaType.APPLICATION_JSON)
     public Response booking(
         @Context HttpServletRequest request, @QueryParam("siteId") long siteId, @QueryParam("pnr") String pnr,
-        @QueryParam("lastName") String lastName) {
+        @QueryParam("lastName") String lastName, @QueryParam("firstName") String firstName) {
 
         try {
             if (_user(request) == null) {
                 return _error(401, "Please log in");
             }
 
-            ObjectEntry booking = _findBooking(siteId, pnr, lastName);
+            ObjectEntry booking = _findBooking(siteId, pnr, lastName, firstName);
 
             if (booking == null) {
                 return _error(404, "Booking not found. Check the PNR and last name.");
@@ -282,7 +283,24 @@ public class BoardingApplication extends Application {
                 return _error(409, problem);
             }
 
-            return Response.ok(_bookingJson(booking).toString()).build();
+            JSONObject json = _bookingJson(booking);
+            JSONArray passengers = JSONFactoryUtil.createJSONArray();
+
+            // Everyone on the same booking code, so the page can offer the next passenger.
+            for (ObjectEntry member : _party(siteId, pnr)) {
+                Map<String, Serializable> m = member.getValues();
+                JSONObject p = JSONFactoryUtil.createJSONObject();
+
+                p.put("firstName", String.valueOf(m.get("firstName")));
+                p.put("lastName", String.valueOf(m.get("lastName")));
+                p.put("done", _bookingProblem(member) != null);
+
+                passengers.put(p);
+            }
+
+            json.put("passengers", passengers);
+
+            return Response.ok(json.toString()).build();
         }
         catch (Exception exception) {
             return _error(500, "Could not look up the booking");
@@ -319,7 +337,7 @@ public class BoardingApplication extends Application {
             }
 
             synchronized (_LOCK) {
-                ObjectEntry booking = _findBooking(siteId, input.getString("pnr"), input.getString("lastName"));
+                ObjectEntry booking = _findBooking(siteId, input.getString("pnr"), input.getString("lastName"), input.getString("firstName"));
 
                 if (booking == null) {
                     return _error(404, "Booking not found. Check the PNR and last name.");
@@ -455,7 +473,7 @@ public class BoardingApplication extends Application {
             String seat = input.getString("seat").trim().toUpperCase();
             String returnUrl = input.getString("returnUrl");
 
-            ObjectEntry booking = _findBooking(siteId, input.getString("pnr"), input.getString("lastName"));
+            ObjectEntry booking = _findBooking(siteId, input.getString("pnr"), input.getString("lastName"), input.getString("firstName"));
 
             if ((booking == null) || (_bookingProblem(booking) != null) ||
                 !seat.matches("(?:[1-9]|1[0-9]|20)[A-F]") || !_seatInClass(seat, _travelClass(booking.getValues())) ||
@@ -634,6 +652,7 @@ public class BoardingApplication extends Application {
         json.put("flightKey", _flightKey(b));
         json.put("flightId", _flightId(b));
         json.put("passengerName", b.get("firstName") + " " + b.get("lastName"));
+        json.put("firstName", String.valueOf(b.get("firstName")));
         json.put("travelClass", _travelClass(b));
 
         return json;
@@ -676,17 +695,59 @@ public class BoardingApplication extends Application {
         return null;
     }
 
-    private ObjectEntry _findBooking(long siteId, String pnr, String lastName) throws Exception {
-        if ((pnr == null) || (lastName == null) || pnr.trim().isEmpty() || lastName.trim().isEmpty()) {
-            return null;
+    /** Everyone booked under one booking code (one booking code can hold several passengers). */
+    private List<ObjectEntry> _party(long siteId, String pnr) throws Exception {
+        List<ObjectEntry> party = new ArrayList<>();
+
+        if ((pnr == null) || pnr.trim().isEmpty()) {
+            return party;
         }
 
         for (ObjectEntry entry : _entries("C_Booking", siteId)) {
+            if (pnr.trim().equalsIgnoreCase(String.valueOf(entry.getValues().get("pnr")))) {
+                party.add(entry);
+            }
+        }
+
+        return party;
+    }
+
+    /**
+     * The booking of one passenger. The booking code plus the last name of anyone on it proves who is asking. Without a first name the
+     * first passenger with that last name who is not checked in yet is returned; with a first name that passenger is returned.
+     */
+    private ObjectEntry _findBooking(long siteId, String pnr, String lastName, String firstName) throws Exception {
+        if ((lastName == null) || lastName.trim().isEmpty()) {
+            return null;
+        }
+
+        List<ObjectEntry> party = _party(siteId, pnr);
+        ObjectEntry first = null;
+
+        for (ObjectEntry entry : party) {
             Map<String, Serializable> b = entry.getValues();
 
-            if (pnr.trim().equalsIgnoreCase(String.valueOf(b.get("pnr"))) &&
-                lastName.trim().equalsIgnoreCase(String.valueOf(b.get("lastName")))) {
+            if (lastName.trim().equalsIgnoreCase(String.valueOf(b.get("lastName")))) {
+                if (first == null) {
+                    first = entry;
+                }
 
+                if (((firstName == null) || firstName.trim().isEmpty()) && (_bookingProblem(entry) == null)) {
+                    return entry;
+                }
+            }
+        }
+
+        if (first == null) {
+            return null;
+        }
+
+        if ((firstName == null) || firstName.trim().isEmpty()) {
+            return first;
+        }
+
+        for (ObjectEntry entry : party) {
+            if (firstName.trim().equalsIgnoreCase(String.valueOf(entry.getValues().get("firstName")))) {
                 return entry;
             }
         }
