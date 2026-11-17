@@ -58,8 +58,10 @@ const airlineOf = (flightNumber, airline) => airline || (AIRLINES.find((a) => St
 // Photos are never stored in the code: city pictures come from Wikipedia when the page opens,
 // airline logos from a public logo service, and aircraft photos from Planespotters.
 const photoCache = {};
-const cityPhoto = (city, country) => {
-	const key = city + '|' + country;
+// The picture of an airport: the lead picture of the airport's own Wikipedia page (never a city picture). Flags, maps, logos and drawings are skipped;
+// when there is no good picture one of our own aviation photos is used, always the same one for the same airport.
+const airportPhoto = (name) => {
+	const key = 'airport:' + name;
 	if (!photoCache[key]) {
 		photoCache[key] = (async () => {
 			try {
@@ -68,20 +70,16 @@ const cityPhoto = (city, country) => {
 			} catch (e) {}
 			let url = '';
 			try {
-				const title = (city === 'New York' ? 'New York City' : city).replace(/ /g, '_');
+				const title = (/airport/i.test(name) ? name : name + ' Airport').replace(/ /g, '_');
 				const res = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title));
 				if (res.ok) {
 					const d = await res.json(), src = d.thumbnail && d.thumbnail.source;
-					if (src && d.type === 'standard' && !/Flag_of|\.svg/i.test(src)) url = src.replace(/\/\d+px-/, '/960px-');
+					if (src && d.type === 'standard' && !/flag|map|logo|locator|seal|diagram|sentinel|satellite|landsat|word_?mark|\.svg/i.test(src)) url = src.replace(/\/\d+px-/, '/960px-');
 				}
 			} catch (e) {}
 			if (!url) {
-				try {
-					const res = await fetch('https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=' + encodeURIComponent(city + ' skyline') + '&gsrlimit=5&prop=pageimages&piprop=thumbnail&pithumbsize=960&format=json&origin=*');
-					const pages = Object.values(((await res.json()).query || {}).pages || {}).sort((a, b) => a.index - b.index);
-					const hit = pages.find((pg) => pg.thumbnail && !/Flag_of|\.svg/i.test(pg.thumbnail.source));
-					if (hit) url = hit.thumbnail.source;
-				} catch (e) {}
+				const sum = Array.from(name).reduce((t, c) => t + c.charCodeAt(0), 0);
+				url = '/o/flight-status-app/hero/' + HERO_PHOTOS[sum % HERO_PHOTOS.length][0];
 			}
 			try { sessionStorage.setItem('faPhoto:' + key, url); } catch (e) {}
 			return url;
@@ -89,15 +87,11 @@ const cityPhoto = (city, country) => {
 	}
 	return photoCache[key];
 };
-// Aviation photos saved in assets/hero (credits: Wikimedia Commons). One is picked at random on each page load, never the same one twice in a row.
+// Only airplane and airport photos, saved in assets/hero (credits: Wikimedia Commons). One is picked at random on each page load, never the same one twice in a row.
 const HERO_PHOTOS = [
 	['1.jpg', 'Jordi Cucurull', 'CC BY-SA 2.0'], ['2.jpg', 'Harry Knight', 'CC0'], ['3.jpg', 'Bahnfrend', 'CC BY-SA 4.0'], ['4.jpg', 'SuFlyer', 'CC0'],
 	['5.jpg', 'Timothy A. Gonsalves', 'CC BY-SA 4.0'], ['6.jpg', 'Timothy A. Gonsalves', 'CC BY-SA 4.0'], ['7.jpg', 'Biswarup Ganguly', 'CC BY 3.0'], ['8.jpg', 'Sunnya343', 'CC BY-SA 4.0'],
 	['9.jpg', 'Apurba Biswas', 'CC0'], ['10.jpg', 'ANKAN', 'CC BY-SA 4.0'], ['11.jpg', 'Josekuttypanackal', 'CC BY 3.0'], ['12.jpg', 'Krish Aarush', 'CC BY-SA 4.0'],
-	['13.jpg', 'iMahesh', 'CC BY-SA 4.0'], ['14.jpg', 'Wolfgang Moroder', 'CC BY-SA 3.0'], ['15.jpg', 'Bernard Gagnon', 'CC BY 4.0'], ['16.jpg', 'The Cosmonaut', 'CC BY-SA 2.5'],
-	['17.jpg', 'Diliff', 'CC BY-SA 3.0'], ['18.jpg', 'Diego Delso', 'CC BY-SA 4.0'], ['19.jpg', 'Johannes Groll', 'CC0'], ['20.jpg', 'Anna Tsolidou', 'CC BY-SA 4.0'],
-	['21.jpg', 'Sam Ferrara', 'CC0'], ['22.jpg', 'Martin Falbisoner', 'CC BY-SA 4.0'], ['23.jpg', 'Basile Morin', 'CC BY-SA 4.0'], ['24.jpg', 'Wilfredor', 'CC0'],
-	['25.jpg', 'Pierre Blaché', 'CC0'], ['26.jpg', 'Vyacheslav Argenberg', 'CC BY 4.0'],
 ];
 // The pictures for the login and register pages (files in assets/hero, listed above): 3 aircraft and 2 airports.
 const AUTH_PHOTOS = ['1.jpg', '3.jpg', '7.jpg', '8.jpg', '9.jpg'];
@@ -110,14 +104,14 @@ const HERO = (() => {
 	return HERO_PHOTOS[i];
 })();
 const heroBg = (overlay) => overlay + ',url("/o/flight-status-app/hero/' + HERO[0] + '")';
-const showPhoto = (el, city, country, overlay) => cityPhoto(city, country).then((url) => {
+const showPhoto = (el, name, overlay) => airportPhoto(name).then((url) => {
 	if (url && el.isConnected) {
 		el.style.backgroundImage = (overlay ? overlay + ',' : '') + 'url("' + url + '")';
 		el.classList.add('has-photo');
 	}
 });
 const fillPhotos = (root) => root.querySelectorAll('[data-hero]').forEach((el) => { el.style.backgroundImage = heroBg(el.dataset.photoOverlay); el.classList.add('has-photo'); });
-const fillCityPhotos = (root) => root.querySelectorAll('[data-photo-city]').forEach((el) => showPhoto(el, el.dataset.photoCity, el.dataset.photoCountry || '', el.dataset.photoOverlay || ''));
+const fillCityPhotos = (root) => root.querySelectorAll('[data-photo-name]').forEach((el) => showPhoto(el, el.dataset.photoName, el.dataset.photoOverlay || ''));
 const fillAllPhotos = (root) => { fillPhotos(root); fillCityPhotos(root); };
 const logoHtml = (flightNumber, airline, cls) => {
 	const a = AIRLINES.find((x) => x[1] === airline) || AIRLINES.find((x) => String(flightNumber).toUpperCase().startsWith(x[0]));
@@ -652,7 +646,7 @@ class FlightStatusApp extends HTMLElement {
 		// Photographers and licences of the pictures (page photos are listed in HERO_PHOTOS, transport photos in assets/guide/credits.json).
 		pages.photos = ['Photo credits', '<p>The pictures on this site are free-licence photos from Wikipedia and Wikimedia Commons. Thank you to the photographers.</p><h3>Page and banner photos</h3><p>' +
 			[...new Set(HERO_PHOTOS.map((x) => x[1] + ' (' + x[2] + ')'))].map(esc).join(', ') + '.</p><h3>Transport photos</h3><ul class="fa-credits"><li>Loading...</li></ul>' +
-			'<h3>City photos</h3><p>The city pictures on the Airports page come from Wikipedia. Each one belongs to its photographer under a free licence.</p>'];
+			'<h3>Airport photos</h3><p>The airport pictures on the Airports page come from each airport\'s own Wikipedia page under a free licence.</p>'];
 		const [title, body] = pages[kind];
 		const modal = document.createElement('div');
 		modal.className = 'fa-modal';
@@ -1745,8 +1739,8 @@ class FlightStatusApp extends HTMLElement {
 			'<section class="fa-section fa-reveal"><div class="fa-head"><h2>Popular destinations</h2><a href="' + r + '/airports">All airports &rarr;</a></div><div class="fa-destgrid">' +
 			served.slice(0, 12).map((a) => {
 				const n = flights.filter((f) => f.originAirportId == a.id || f.destinationAirportId == a.id).length;
-				return `<a class="fa-dest" href="${r}/airport-board?airport=${esc(a.code)}" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}" data-photo-overlay="linear-gradient(180deg, rgba(8,18,50,.05) 30%, rgba(8,18,50,.85))"><span class="fa-destcount">${n} flight${n === 1 ? '' : 's'}</span><b>${esc(a.city)}</b><small>${esc(a.country)} &middot; ${esc(a.code)}</small></a>`;
-			}).join('') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p></section>' +
+				return `<a class="fa-dest" href="${r}/airport-board?airport=${esc(a.code)}" data-photo-name="${esc(a.name)}" data-photo-overlay="linear-gradient(180deg, rgba(8,18,50,.05) 30%, rgba(8,18,50,.85))"><span class="fa-destcount">${n} flight${n === 1 ? '' : 's'}</span><b>${esc(a.city)}</b><small>${esc(a.country)} &middot; ${esc(a.code)}</small></a>`;
+			}).join('') + '</div></section>' +
 			'<section class="fa-steps fa-reveal"><div class="fa-head"><h2>How it works</h2></div><div class="fa-stepgrid">' +
 			[['search', '1', 'Search', 'Find a flight by number, route, date or airline.'], ['bell', '2', 'Follow', 'Tap "Get email alerts" to hear about delays and gate changes.'], ['gate', '3', 'Check in', 'Enter your booking code, choose your seat and get your boarding pass.'], ['plane', '4', 'Fly', 'Watch your aircraft live on the map until it lands.']]
 				.map((x) => `<div class="fa-step"><span class="fa-stepno">${x[1]}</span><span class="fa-ico">${ICONS[x[0]]}</span><b>${x[2]}</b><p>${x[3]}</p></div>`).join('') + '</div></section>' +
@@ -2235,7 +2229,7 @@ class FlightStatusApp extends HTMLElement {
 		const photo = (r) => {
 			if (/^(https?:\/\/|\/)/i.test(r.imageUrl)) return `<div class="fa-guideimg has-photo" style="background-image:url('${esc(r.imageUrl)}')"></div>`;
 			if (credits[slug(r.category)]) return `<div class="fa-guideimg has-photo" title="Photo: ${esc(credits[slug(r.category)])}" style="background-image:url('/o/flight-status-app/guide/${esc(slug(r.category))}.jpg')"></div>`;
-			return `<div class="fa-guideimg" data-photo-city="${esc(airport.city)}" data-photo-country="${esc(airport.country)}"></div>`;
+			return `<div class="fa-guideimg" data-photo-name="${esc(airport.name)}"></div>`;
 		};
 		const panel = (r, hasPoints) => `<div class="fa-guidepanel">${photo(r)}<div class="fa-guideinfo"><h2>${esc(r.title)}</h2>${lines(r.details).map((x) => '<p>' + esc(x) + '</p>').join('')}` +
 			(!hasPoints && lines(r.pickupPoints).length ? '<h3>Pick-up points</h3><ul>' + lines(r.pickupPoints).map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') +
@@ -2297,7 +2291,7 @@ class FlightStatusApp extends HTMLElement {
 		const list = Object.values(ap);
 		const count = (id) => flights.filter((f) => f.originAirportId == id || f.destinationAirportId == id).length;
 		view.innerHTML = '<div class="fa-title"><h1>Airports</h1><p>' + list.length + ' airports in our network.</p></div><div class="fa-grid">' +
-			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-city="${esc(a.city)}" data-photo-country="${esc(a.country)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span>${boardCodes.has(a.code) ? `<a class="fa-livetag" href="${this._root}/flight-status?airport=${esc(a.code)}&dir=arr">Live arrivals &amp; departures</a>` : `<small>${count(a.id) ? count(a.id) + ' flights today' : 'No flights today'}</small>`}${this.guideButton(a, guides, 'To and from the airport')}</div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons</p>';
+			(list.map((a) => `<div class="fa-card"><div class="fa-cardphoto" data-photo-name="${esc(a.name)}"><span class="fa-code">${esc(a.code)}</span></div><b>${esc(a.name)}</b><span>${esc(a.city)}${a.country ? ', ' + esc(a.country) : ''}</span>${boardCodes.has(a.code) ? `<a class="fa-livetag" href="${this._root}/flight-status?airport=${esc(a.code)}&dir=arr">Live arrivals &amp; departures</a>` : `<small>${count(a.id) ? count(a.id) + ' flights today' : 'No flights today'}</small>`}${this.guideButton(a, guides, 'To and from the airport')}</div>`).join('') || '<div class="fa-msg">No airports found.</div>') + '</div>';
 		fillAllPhotos(view);
 		this.setupFilter(view, {key: 'airports', items: '.fa-card', placeholder: 'Search airport code, name, city or country'});
 	}
@@ -2604,7 +2598,7 @@ class FlightStatusApp extends HTMLElement {
 			if (!here) return;
 			banner.querySelector('.fa-boardcity').textContent = here.city + ', ' + here.country;
 			banner.querySelector('.fa-boardname').textContent = here.name + ' (' + here.code + ')';
-			showPhoto(banner, here.city, here.country, 'linear-gradient(0deg, rgba(10,21,56,.85), rgba(10,21,56,.15))');
+			showPhoto(banner, here.name, 'linear-gradient(0deg, rgba(10,21,56,.85), rgba(10,21,56,.15))');
 		};
 
 		const draw = (list) => {
@@ -2622,7 +2616,7 @@ class FlightStatusApp extends HTMLElement {
 						`<td><div class="fa-fl">${logoHtml(f.flightNumber, f.airline)}<div><b>${esc(f.flightNumber)}</b>${f.airline ? '<small>' + esc(f.airline) + '</small>' : ''}</div></div></td>` +
 						`<td><b>${esc(other.city || '?')}</b><small>${esc(other.code || '')}${other.country ? ' &middot; ' + esc(other.country) : ''}</small></td>` +
 						`<td><b>${esc(gateOf(f))}</b></td><td><span class="fa-badge ${statusClass(f.status)}">${esc(f.status)}${late ? ' +' + late + ' min' : ''}</span></td></tr>`;
-				}).join('') + '</tbody></table></div><p class="fa-credit">City photos: Wikipedia &amp; Wikimedia Commons &middot; Airline logos: pics.avs.io</p>';
+				}).join('') + '</tbody></table></div>';
 		};
 
 		let current = flights;
