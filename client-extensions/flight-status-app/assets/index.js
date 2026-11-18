@@ -1777,10 +1777,10 @@ class FlightStatusApp extends HTMLElement {
 		});
 	}
 
-	// Asks the server for a fresh read of one airport's board. The server starts it only when the last read is older than 2 minutes; asking here at most once a minute per airport.
+	// Asks the server for a fresh read of one airport's board. The server starts it only when the last read is older than 30 seconds; asking here at most every 30 seconds per airport.
 	touchBoard(code) {
 		const seen = this._touched = this._touched || {};
-		if (!code || (Date.now() - (seen[code] || 0)) < 60000) return;
+		if (!code || (Date.now() - (seen[code] || 0)) < 30000) return;
 		seen[code] = Date.now();
 		this.json('/o/flight-feed/boards/refresh?airport=' + encodeURIComponent(code)).catch(() => {});
 	}
@@ -1832,6 +1832,9 @@ class FlightStatusApp extends HTMLElement {
 			draw();
 		});
 		draw();
+		// Every 30 seconds the list is drawn again (and the server is asked to refresh the airport), as long as the Home page is open.
+		clearInterval(this._lbTimer);
+		this._lbTimer = setInterval(() => { if (box.isConnected) draw(); else clearInterval(this._lbTimer); }, 30000);
 	}
 
 	// Flight Status: a search card (Flight No. / Route / Airport) and an airport board whose rows open to show the details of a flight.
