@@ -197,7 +197,7 @@ final class BoardReader {
 
 	/**
 	 * Reads one airport now, in the background, when the page asks for it and the last read is older than
-	 * BOARD_REFRESH_MINUTES (default 2). Returns true when a read was started. This keeps the airport someone is looking at fresh
+	 * BOARD_REFRESH_SECONDS (default 30). Returns true when a read was started. This keeps the airport someone is looking at fresh
 	 * without reading every airport all the time.
 	 */
 	boolean refresh(String code) {
@@ -210,7 +210,7 @@ final class BoardReader {
 		Status status = _status.computeIfAbsent(code, k -> new Status());
 
 		synchronized (status) {
-			if ((System.currentTimeMillis() - status.lastTry) < (FeedSupport.number("BOARD_REFRESH_MINUTES", 2) * 60_000L)) {
+			if ((System.currentTimeMillis() - status.lastTry) < (FeedSupport.number("BOARD_REFRESH_SECONDS", 30) * 1000L)) {
 				return false;
 			}
 

@@ -139,8 +139,10 @@ public class FeedApplication extends Application {
 		// Every 2 minutes: the free live check of planes in the air.
 		_scheduler.scheduleWithFixedDelay(() -> _run("Live position check", this::_liveCheck), 1, 2, TimeUnit.MINUTES);
 
-		// The airport boards (arrivals and departures) are read every BOARD_INTERVAL_MINUTES (default 5).
-		_scheduler.scheduleWithFixedDelay(() -> _run("Airport boards", _boards::run), 2, Math.max(5, FeedSupport.number("BOARD_INTERVAL_MINUTES", 5)), TimeUnit.MINUTES);
+		// The airport boards (arrivals and departures): the first read BOARD_START_DELAY_SECONDS after the start (default 20), then every BOARD_INTERVAL_MINUTES (default 5).
+		_scheduler.scheduleWithFixedDelay(
+			() -> _run("Airport boards", _boards::run), FeedSupport.number("BOARD_START_DELAY_SECONDS", 20),
+			Math.max(5, FeedSupport.number("BOARD_INTERVAL_MINUTES", 5)) * 60, TimeUnit.SECONDS);
 
 		// Every 2 minutes: the provider sync, but only when the key is set and the wait time has passed (it uses the monthly calls).
 		_scheduler.scheduleWithFixedDelay(
@@ -250,7 +252,7 @@ public class FeedApplication extends Application {
 
 	/**
 	 * A page that shows an airport's board asks for a fresh read of that airport. It starts a read in the background only when the last
-	 * one is older than BOARD_REFRESH_MINUTES (default 2), so many viewers never make many reads. The page picks up the new rows on its
+	 * one is older than BOARD_REFRESH_SECONDS (default 30), so many viewers never make many reads. The page picks up the new rows on its
 	 * next normal refresh.
 	 */
 	@GET
