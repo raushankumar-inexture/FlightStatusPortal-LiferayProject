@@ -117,6 +117,11 @@ flight-status-app .fa-btn:disabled { opacity: .6; cursor: wait; }
 flight-status-app .fa-error { padding: .7rem 1rem; border-radius: 8px; background: #fde8e8; color: #b42318; font-size: .9rem; }
 flight-status-app .fa-alt { margin: 1.25rem 0 0 !important; text-align: center; }
 flight-status-app .fa-alt a { color: var(--fa-blue); font-weight: 600; }
+flight-status-app .fa-or { display: flex; align-items: center; gap: .75rem; margin: 1.1rem 0 .9rem !important; color: #6b7790; font-size: .85rem; }
+flight-status-app .fa-or::before, flight-status-app .fa-or::after { content: ''; flex: 1; height: 1px; background: #d9e0ee; }
+flight-status-app .fa-google { display: flex; align-items: center; justify-content: center; gap: .6rem; width: 100%; padding: .85rem 1rem; border: 1px solid #c9d2e3; border-radius: 12px; background: #fff; color: #1f2a44; font: inherit; font-weight: 600; cursor: pointer; }
+flight-status-app .fa-google:hover { background: #f4f7fd; }
+flight-status-app .fa-google:disabled { opacity: .6; cursor: wait; }
 
 /* In the page editor, don't pin the header/footer so Liferay's editor toolbar (Publish etc.) stays usable. */
 flight-status-app.fa-editing .fa-header, flight-status-app.fa-editing .fa-footer { position: static; }

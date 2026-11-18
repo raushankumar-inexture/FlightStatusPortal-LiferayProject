@@ -1533,9 +1533,12 @@ class FlightStatusApp extends HTMLElement {
 			'<label>Password<span class="fa-pwd"><input name="password" type="password" required autocomplete="current-password" placeholder="Your password" /><button type="button" class="fa-eye" aria-label="Show password">Show</button></span></label>' +
 			'<div class="fa-authrow"><label class="fa-check"><input type="checkbox" name="rememberMe" checked /> Remember me</label><a class="fa-forgot" href="' + forgot + '">Forgot password?</a></div>' +
 			'<div class="fa-error" hidden></div><button class="fa-btn block" type="submit">LOG IN</button></form>',
+			'<p class="fa-or"><span>or</span></p><div class="fa-error fa-google-err" hidden></div>' +
+			'<button type="button" class="fa-google"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Continue with Google</button>' +
 			'<p class="fa-alt">Don\'t have an account? <a href="' + this._root + '/register">Create a new account</a></p>');
 		fillAllPhotos(view);
 		this.pwdToggle(view);
+		view.querySelector('.fa-google').addEventListener('click', (e) => this.googleLogin(e.currentTarget, view.querySelector('.fa-google-err')));
 		// Two steps: password first, then the 6-digit code we e-mail. After the code the server gives a short login ticket (a JWT).
 		const form = view.querySelector('form');
 		let challenge = '';
@@ -1580,6 +1583,39 @@ class FlightStatusApp extends HTMLElement {
 			}
 			err.hidden = false;
 		});
+	}
+
+	// Google login uses Liferay's own OpenID Connect sign-in. We open Liferay's sign-in page in the background, take its OpenID Connect form and submit it,
+	// so the Google client that is set up in Liferay (Control Panel, OAuth Client Administration) is used and nothing is typed in here.
+	async googleLogin(btn, err) {
+		const ctx = Liferay.ThemeDisplay.getPathContext();
+		const page = async (url) => new DOMParser().parseFromString(await (await fetch(url, {credentials: 'include'})).text(), 'text/html');
+		btn.disabled = true;
+		err.hidden = true;
+		try {
+			const start = await page(ctx + '/c/portal/login?p_p_id=com_liferay_login_web_portlet_LoginPortlet&p_p_lifecycle=0&p_p_state=maximized&p_p_mode=view');
+			const link = start.querySelector('a[href*="openid_connect_request"]');
+			if (!link) throw new Error('Google login is not turned on yet. Please use your email and password.');
+			const doc = await page(link.href);
+			const source = doc.querySelector('form[action*="openid_connect_request"]');
+			if (!source) throw new Error('Google login is not ready yet. Please use your email and password.');
+			const form = document.createElement('form');
+			form.method = 'post';
+			form.action = source.action;
+			source.querySelectorAll('input[name], select[name]').forEach((f) => {
+				const input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = f.name;
+				input.value = f.name.endsWith('_redirect') ? location.origin + this._root + '/home' : f.value;
+				form.appendChild(input);
+			});
+			document.body.appendChild(form);
+			form.submit();
+		} catch (x) {
+			err.textContent = x.message;
+			err.hidden = false;
+			btn.disabled = false;
+		}
 	}
 
 	async authCall(path, body) {
