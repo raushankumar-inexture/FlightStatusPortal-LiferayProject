@@ -10,6 +10,8 @@ const applyTheme = (choice) => {
 	document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 };
 applyTheme(getTheme());
+// Liferay's page-to-page navigation resets the attributes of the page, which dropped the theme. Put it back at once.
+new MutationObserver(() => { if (!document.documentElement.dataset.theme) applyTheme(getTheme()); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
 if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(getTheme()));
 const THEME_ICONS = {
 	auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>',
@@ -427,6 +429,7 @@ class FlightStatusApp extends HTMLElement {
 		const sidebar = sidebarMode ? '<aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
 			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '';
 		this.classList.toggle('has-sidebar', sidebarMode);
+		applyTheme(getTheme());
 		this.innerHTML =
 			'<header class="fa-header"><div class="fa-header__inner"><a class="fa-brand" href="' + root + (adminMode ? '/admin' : '/home') + '"><span class="fa-brand__logo">' + ICONS.plane + '</span>Flight Status <b>' + (adminMode ? 'Admin' : 'Portal') + '</b></a>' +
 			'<button class="fa-burger" type="button" aria-label="Menu">&#9776;</button>' +
@@ -1615,7 +1618,7 @@ class FlightStatusApp extends HTMLElement {
 			const link = e.target.closest('.fa-resend, .fa-back, .fa-email');
 			if (!link) return;
 			e.preventDefault();
-			if (link.classList.contains('fa-back')) return this.view_login(view);
+			if (link.classList.contains('fa-back')) { this._otp = ''; return this.view_login(view); }
 			const err = form.querySelector('.fa-error');
 			try {
 				const d = await this.authCall('/resend', {challenge, via: link.classList.contains('fa-email') ? 'email' : ''});
@@ -1628,6 +1631,26 @@ class FlightStatusApp extends HTMLElement {
 			}
 			err.hidden = false;
 		});
+		// Back from Google: the server already sent the 6-digit code and sent the person here with ?otp=<id>. Show the code box.
+		// (The page can be drawn twice, so the pending code is remembered in this._otp.)
+		const otp = new URLSearchParams(location.search).get('otp') || this._otp;
+		if (otp) {
+			this._otp = otp;
+			try { history.replaceState(null, '', location.pathname); } catch (e) {}
+			try {
+				const res = await fetch('/o/flight-auth/challenge?id=' + encodeURIComponent(otp), {credentials: 'include'});
+				const d = await res.json();
+				if (!res.ok) throw new Error(d.error || 'The code has expired. Please log in again.');
+				challenge = d.challenge;
+				showStep(d);
+				form.insertAdjacentHTML('afterbegin', '<p class="fa-hint"><b>You signed in with Google.</b> For your safety, please also enter the code we sent.</p>');
+			} catch (x) {
+				this._otp = '';
+				const err = form.querySelector('.fa-error');
+				err.textContent = x.message;
+				err.hidden = false;
+			}
+		}
 	}
 
 	// Google login uses Liferay's own OpenID Connect sign-in. We open Liferay's sign-in page in the background, take its OpenID Connect form and submit it,

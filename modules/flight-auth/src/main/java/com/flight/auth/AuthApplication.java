@@ -28,12 +28,14 @@ import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Application;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -102,7 +104,7 @@ public class AuthApplication extends Application {
 
 	}
 
-	private final java.util.Map<String, Challenge> _challenges = new ConcurrentHashMap<>();
+	private static final java.util.Map<String, Challenge> _challenges = new ConcurrentHashMap<>();
 
 	@Override
 	public Set<Object> getSingletons() {
@@ -153,34 +155,8 @@ public class AuthApplication extends Application {
 				return Response.ok(out.toString()).build();
 			}
 
-			Challenge challenge = new Challenge();
-
-			challenge.userId = user.getUserId();
-			challenge.email = user.getEmailAddress();
-			challenge.name = user.getFullName();
-			challenge.phone = _primaryPhone(user);
-			challenge.via = ((challenge.phone != null) && _twilioReady()) ? "sms" : "email";
-
-			String id = Long.toHexString(_RANDOM.nextLong()) + Long.toHexString(_RANDOM.nextLong());
-
-			_challenges.values().removeIf((c) -> c.expires < now);
-
-			try {
-				_sendCode(id, challenge);
-			}
-			catch (Exception exception) {
-				if (!"sms".equals(challenge.via)) {
-					throw exception;
-				}
-
-				_log.warn("SMS could not be sent, using e-mail: " + exception.getMessage());
-
-				challenge.via = "email";
-
-				_sendCode(id, challenge);
-			}
-
-			_challenges.put(id, challenge);
+			String id = startChallenge(user);
+			Challenge challenge = _challenges.get(id);
 
 			out.put("challenge", id);
 			out.put("via", challenge.via);
@@ -283,7 +259,64 @@ public class AuthApplication extends Application {
 	}
 
 	/** Makes a new code, keeps only its hash, and e-mails it. */
-	private void _sendCode(String id, Challenge challenge) throws Exception {
+	/** Sends a login code to the user and keeps it for the next step. Returns the id the page needs to check the code. Used by the password login and for people who came back from Google. */
+	static String startChallenge(User user) throws Exception {
+		long now = System.currentTimeMillis();
+
+		Challenge challenge = new Challenge();
+
+		challenge.userId = user.getUserId();
+		challenge.email = user.getEmailAddress();
+		challenge.name = user.getFullName();
+		challenge.phone = _primaryPhone(user);
+		challenge.via = ((challenge.phone != null) && _twilioReady()) ? "sms" : "email";
+
+		String id = Long.toHexString(_RANDOM.nextLong()) + Long.toHexString(_RANDOM.nextLong());
+
+		_challenges.values().removeIf((c) -> c.expires < now);
+
+		try {
+			_sendCode(id, challenge);
+		}
+		catch (Exception exception) {
+			if (!"sms".equals(challenge.via)) {
+				throw exception;
+			}
+
+			_log.warn("SMS could not be sent, using e-mail: " + exception.getMessage());
+
+			challenge.via = "email";
+
+			_sendCode(id, challenge);
+		}
+
+		_challenges.put(id, challenge);
+
+		return id;
+	}
+
+	/** What the code screen needs to show for a code that was already sent (no secrets): how it was sent and to where. */
+	@GET
+	@Path("/challenge")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response challenge(@QueryParam("id") String id) {
+		Challenge challenge = (id == null) ? null : _challenges.get(id);
+
+		if ((challenge == null) || (challenge.expires < System.currentTimeMillis())) {
+			return _error(410, "The code has expired. Log in again.");
+		}
+
+		JSONObject out = JSONFactoryUtil.createJSONObject();
+
+		out.put("challenge", id);
+		out.put("via", challenge.via);
+		out.put("sent", _target(challenge));
+		out.put("canEmail", true);
+
+		return Response.ok(out.toString()).build();
+	}
+
+	private static void _sendCode(String id, Challenge challenge) throws Exception {
 		if ("sms".equals(challenge.via)) {
 			_smsStart(challenge.phone);
 		}
@@ -591,7 +624,7 @@ public class AuthApplication extends Application {
 		return System.getenv(name);
 	}
 
-	private void _sendMail(Challenge challenge, String code) throws Exception {
+	private static void _sendMail(Challenge challenge, String code) throws Exception {
 		String host = _setting("FLIGHT_ALERT_SMTP_HOST");
 		String from = _setting("FLIGHT_ALERT_FROM_ADDRESS");
 
