@@ -45,6 +45,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.nio.charset.StandardCharsets;
@@ -326,6 +327,53 @@ public class AuthApplication extends Application {
 			_log.error("Could not save the phone number", exception);
 
 			return _error(500, "Could not save the phone number.");
+		}
+	}
+
+	/** Ends every session of the signed-in user, in all browsers and on all devices (this one included). */
+	@POST
+	@Path("/logout-all")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Response logoutAll(@Context HttpServletRequest request) {
+		try {
+			User user = _sessionUser(request);
+
+			if (user == null) {
+				return _error(401, "Please log in");
+			}
+
+			try {
+				AuthTokenUtil.checkCSRFToken(request, AuthApplication.class.getName());
+			}
+			catch (PrincipalException principalException) {
+				return _error(403, "Please refresh the page and try again");
+			}
+
+			int ended = 0;
+
+			for (HttpSession session : new ArrayList<>(PortalSessionContext.values())) {
+				try {
+					Object userId = session.getAttribute("USER_ID");
+
+					if ((userId != null) && String.valueOf(userId).equals(String.valueOf(user.getUserId()))) {
+						session.invalidate();
+
+						ended++;
+					}
+				}
+				catch (IllegalStateException illegalStateException) {
+					// The session was already ended.
+				}
+			}
+
+			_log.info("Logged out " + user.getEmailAddress() + " from " + ended + " session(s)");
+
+			return Response.ok("{\"ended\":" + ended + "}").build();
+		}
+		catch (Exception exception) {
+			_log.error("Could not log out from all devices", exception);
+
+			return _error(500, "Could not log out from all devices.");
 		}
 	}
 
