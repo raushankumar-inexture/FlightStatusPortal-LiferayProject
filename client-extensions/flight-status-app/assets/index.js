@@ -2,6 +2,22 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({'&': '
 const getFetch = () => (window.Liferay && Liferay.Util && Liferay.Util.fetch ? Liferay.Util.fetch : fetch);
 const SITE_ID = () => Liferay.ThemeDisplay.getScopeGroupId();
 
+// Theme: Light, Dark or Auto. The choice is kept in this browser; Auto follows the computer's own setting. theme.css holds the colours.
+const THEMES = ['auto', 'light', 'dark'];
+const getTheme = () => { try { const t = localStorage.getItem('faTheme'); return THEMES.includes(t) ? t : 'auto'; } catch (e) { return 'auto'; } };
+const applyTheme = (choice) => {
+	const dark = choice === 'dark' || (choice === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+	document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+};
+applyTheme(getTheme());
+if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(getTheme()));
+const THEME_ICONS = {
+	auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>',
+	light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+	dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
+};
+const THEME_NAMES = {auto: 'Auto (follows your device)', light: 'Light', dark: 'Dark'};
+
 const ROUTES = [
 	{path: 'home', slug: 'home', label: 'Home'},
 	{path: 'flights', slug: 'flight-status', group: 'Flights', label: 'Flight Status'},
@@ -414,7 +430,7 @@ class FlightStatusApp extends HTMLElement {
 		this.innerHTML =
 			'<header class="fa-header"><div class="fa-header__inner"><a class="fa-brand" href="' + root + (adminMode ? '/admin' : '/home') + '"><span class="fa-brand__logo">' + ICONS.plane + '</span>Flight Status <b>' + (adminMode ? 'Admin' : 'Portal') + '</b></a>' +
 			'<button class="fa-burger" type="button" aria-label="Menu">&#9776;</button>' +
-			'<nav class="fa-nav-links">' + links + this.authLinks(root, current) + '</nav></div></header>' +
+			'<nav class="fa-nav-links">' + links + this.themeButton() + this.authLinks(root, current) + '</nav></div></header>' +
 			crumbs + '<div class="fa-container">' +
 			(sidebarMode ? '' : '<div class="fa-alerts' + (crumbs ? '' : ' first') + '" hidden></div>') +
 			(sidebarMode ? '<div class="fa-adminshell"><aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
@@ -610,6 +626,16 @@ class FlightStatusApp extends HTMLElement {
 			b.parentElement.classList.toggle('open', !open);
 		}));
 		document.addEventListener('click', () => this.querySelectorAll('.fa-drop.open').forEach((d) => d.classList.remove('open')));
+		const bindTheme = (button) => button && button.addEventListener('click', () => {
+			const next = THEMES[(THEMES.indexOf(getTheme()) + 1) % THEMES.length];
+			try { localStorage.setItem('faTheme', next); } catch (e) {}
+			applyTheme(next);
+			button.outerHTML = this.themeButton();
+			const fresh = this.querySelector('.fa-themebtn');
+			bindTheme(fresh);
+			fresh.focus();
+		});
+		bindTheme(this.querySelector('.fa-themebtn'));
 		const btn = this.querySelector('.fa-userbtn'), list = this.querySelector('.fa-usermenu-list');
 		if (btn && list) {
 			const close = () => { list.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
@@ -620,6 +646,20 @@ class FlightStatusApp extends HTMLElement {
 			});
 			document.addEventListener('click', close);
 			document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+			const all = list.querySelector('.fa-logoutall');
+			if (all) all.addEventListener('click', async () => {
+				if (!confirm('Log out from every browser and device where you are signed in? You will need to log in again.')) return;
+				all.disabled = true;
+				try {
+					const res = await getFetch()('/o/flight-auth/logout-all', {method: 'POST', credentials: 'include'});
+					if (!res.ok) throw new Error('failed');
+				} catch (x) {
+					all.disabled = false;
+					alert('Could not log out from all devices. Please try again.');
+					return;
+				}
+				location.href = this._root + '/login';
+			});
 		}
 		const bell = this.querySelector('.fa-bell');
 		if (bell) this.bindBell(bell, this.querySelector('.fa-notes'));
@@ -1466,6 +1506,11 @@ class FlightStatusApp extends HTMLElement {
 		});
 	}
 
+	themeButton() {
+		const t = getTheme(), next = THEMES[(THEMES.indexOf(t) + 1) % THEMES.length];
+		return '<button type="button" class="fa-themebtn" title="Theme: ' + THEME_NAMES[t] + '. Click for ' + THEME_NAMES[next] + '." aria-label="Theme: ' + THEME_NAMES[t] + '. Click to change.">' + THEME_ICONS[t] + '</button>';
+	}
+
 	authLinks(root, current) {
 		const t = Liferay.ThemeDisplay;
 		if (t.isSignedIn()) {
@@ -1474,7 +1519,7 @@ class FlightStatusApp extends HTMLElement {
 			return '<div class="fa-bellwrap"><button type="button" class="fa-bell" aria-label="Notifications">' + ICONS.bell + '<span class="fa-bellcount" hidden></span></button><div class="fa-notes" hidden></div></div>' +
 				'<div class="fa-usermenu"><button type="button" class="fa-userbtn" aria-haspopup="true" aria-expanded="false"><span class="fa-avatar">' + esc(name.trim().charAt(0).toUpperCase()) + '</span><span class="fa-uname">' + esc(name) + '</span><span class="fa-caret">&#9662;</span></button>' +
 				'<div class="fa-usermenu-list" hidden><div class="fa-umhead">Signed in as<b>' + esc(name) + '</b></div>' + items +
-				`<a class="fa-logout" href="${t.getPathContext()}/c/portal/logout?referer=${encodeURIComponent(root + '/login')}">Logout</a></div></div>`;
+				`<button type="button" class="fa-logoutall">Log out from all devices</button><a class="fa-logout" href="${t.getPathContext()}/c/portal/logout?referer=${encodeURIComponent(root + '/login')}">Logout</a></div></div>`;
 		}
 			return `<a class="fa-btn fa-btn--outline fa-auth ${current === 'login' ? 'active' : ''}" href="${root}/login">Login</a><a class="fa-btn fa-btn--gold fa-auth ${current === 'register' ? 'active' : ''}" href="${root}/register">Register</a>`;
 	}

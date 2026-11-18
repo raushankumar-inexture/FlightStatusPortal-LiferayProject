@@ -7,6 +7,7 @@ flight-status-app:
     - components.css
     - style.css
     - portal.css
+    - theme.css
   htmlElementName: flight-status-app
   instanceable: false
   name: Flight Status App

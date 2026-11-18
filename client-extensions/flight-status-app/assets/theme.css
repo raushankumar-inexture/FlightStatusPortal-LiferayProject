@@ -1,0 +1,346 @@
+/*
+ * Light and dark theme.
+ * The page gets data-theme="light" or data-theme="dark" (set by index.js from the user's choice: Light, Dark or Auto).
+ * Every colour in style.css and portal.css is a variable below, so a theme is only a set of values.
+ * This file is loaded last in client-extension.yaml.
+ */
+
+/* Light (default) */
+:root,
+flight-status-app {
+	--fa-surface: #ffffff;
+	--fa-surface-2: #eef3ff;
+	--fa-surface-3: #f3f6fb;
+	--fa-border: #e3e9f6;
+	--fa-border-strong: #c9d6f5;
+	--fa-heading: #0f1e50;
+	--fa-text: #1c2434;
+	--fa-text-soft: #44506e;
+	--fa-text-secondary: #6b7790;
+	--fa-text-muted: #8a94a8;
+	--fa-link: #0b5fff;
+	--fa-danger: #b42318;
+	--fa-warning: #8a5a00;
+	--fa-success: #137333;
+	--fa-danger-bg: #fde8e8;
+	--fa-warning-bg: #fff4d6;
+	--fa-success-bg: #dcf7e3;
+	--fa-on-gold: #1c2434; /* text on gold buttons: dark in both themes */
+
+	/* One variable for every other fixed colour that used to be written in style.css and portal.css. Light keeps the original value. */
+	--fa-bg-d3efe0: #d3efe0;
+	--fa-bg-d7deec: #d7deec;
+	--fa-bg-d9e0ee: #d9e0ee;
+	--fa-bg-d9f5e3: #d9f5e3;
+	--fa-bg-dbe4f7: #dbe4f7;
+	--fa-bg-dbe6ff: #dbe6ff;
+	--fa-bg-dbe9ff: #dbe9ff;
+	--fa-bg-dde6fa: #dde6fa;
+	--fa-bg-dfe8f7: #dfe8f7;
+	--fa-bg-dff7e7: #dff7e7;
+	--fa-bg-e0e7ff: #e0e7ff;
+	--fa-bg-e0e9ff: #e0e9ff;
+	--fa-bg-e3e9f6: #e3e9f6;
+	--fa-bg-e4eeff: #e4eeff;
+	--fa-bg-e6eeff: #e6eeff;
+	--fa-bg-e6f4ea: #e6f4ea;
+	--fa-bg-e6f6ee: #e6f6ee;
+	--fa-bg-e7e9f0: #e7e9f0;
+	--fa-bg-e8edf7: #e8edf7;
+	--fa-bg-e8eefb: #e8eefb;
+	--fa-bg-e8f0fe: #e8f0fe;
+	--fa-bg-e8f0ff: #e8f0ff;
+	--fa-bg-e8f7ee: #e8f7ee;
+	--fa-bg-e9eef7: #e9eef7;
+	--fa-bg-e9eef8: #e9eef8;
+	--fa-bg-e9f0fc: #e9f0fc;
+	--fa-bg-eaf0ff: #eaf0ff;
+	--fa-bg-eaf1ff: #eaf1ff;
+	--fa-bg-eaf2ff: #eaf2ff;
+	--fa-bg-eceff3: #eceff3;
+	--fa-bg-eceff4: #eceff4;
+	--fa-bg-eef2f8: #eef2f8;
+	--fa-bg-eef2fa: #eef2fa;
+	--fa-bg-eef4ff: #eef4ff;
+	--fa-bg-efe6ff: #efe6ff;
+	--fa-bg-eff3fc: #eff3fc;
+	--fa-bg-f3f6fd: #f3f6fd;
+	--fa-bg-f3f6ff: #f3f6ff;
+	--fa-bg-f3f7ff: #f3f7ff;
+	--fa-bg-f4f7fd: #f4f7fd;
+	--fa-bg-f4f7ff: #f4f7ff;
+	--fa-bg-f4f8ff: #f4f8ff;
+	--fa-bg-f5f8ff: #f5f8ff;
+	--fa-bg-f6f8fd: #f6f8fd;
+	--fa-bg-f8fafc: #f8fafc;
+	--fa-bg-f8fafd: #f8fafd;
+	--fa-bg-f8faff: #f8faff;
+	--fa-bg-f8fbff: #f8fbff;
+	--fa-bg-fbfcff: #fbfcff;
+	--fa-bg-fdecea: #fdecea;
+	--fa-bg-fdecec: #fdecec;
+	--fa-bg-fdf3f7: #fdf3f7;
+	--fa-bg-ffe39a: #ffe39a;
+	--fa-bg-fff0d1: #fff0d1;
+	--fa-bg-fff3c4: #fff3c4;
+	--fa-bg-fff6dd: #fff6dd;
+	--fa-tx-0b2f94: #0b2f94;
+	--fa-tx-0b7a43: #0b7a43;
+	--fa-tx-0f3a99: #0f3a99;
+	--fa-tx-1146d6: #1146d6;
+	--fa-tx-12275c: #12275c;
+	--fa-tx-146c3c: #146c3c;
+	--fa-tx-15803d: #15803d;
+	--fa-tx-1a1a1a: #1a1a1a;
+	--fa-tx-1b3fa8: #1b3fa8;
+	--fa-tx-1e3a8a: #1e3a8a;
+	--fa-tx-1f2a44: #1f2a44;
+	--fa-tx-1f2a52: #1f2a52;
+	--fa-tx-1f9d55: #1f9d55;
+	--fa-tx-38604a: #38604a;
+	--fa-tx-3a4a70: #3a4a70;
+	--fa-tx-3b4559: #3b4559;
+	--fa-tx-475569: #475569;
+	--fa-tx-4a5574: #4a5574;
+	--fa-tx-4a5875: #4a5875;
+	--fa-tx-555555: #555555;
+	--fa-tx-5a6784: #5a6784;
+	--fa-tx-6a3dd6: #6a3dd6;
+	--fa-tx-7a5200: #7a5200;
+	--fa-tx-7a5b00: #7a5b00;
+	--fa-tx-8a96ad: #8a96ad;
+	--fa-tx-a86400: #a86400;
+	--fa-tx-b27a00: #b27a00;
+	--fa-tx-b3261e: #b3261e;
+	--fa-tx-b42323: #b42323;
+	--fa-tx-b8860b: #b8860b;
+	--fa-tx-c0392b: #c0392b;
+	--fa-tx-c4282d: #c4282d;
+	--fa-tx-c98f00: #c98f00;
+	--fa-tx-d64545: #d64545;
+	--fa-bd-b9c6e6: #b9c6e6;
+	--fa-bd-b9ceff: #b9ceff;
+	--fa-bd-bcd2ff: #bcd2ff;
+	--fa-bd-bfe6cd: #bfe6cd;
+	--fa-bd-c4cde0: #c4cde0;
+	--fa-bd-c7d7f5: #c7d7f5;
+	--fa-bd-c9d2e3: #c9d2e3;
+	--fa-bd-cfd9f2: #cfd9f2;
+	--fa-bd-cfdcff: #cfdcff;
+	--fa-bd-d5dae4: #d5dae4;
+	--fa-bd-d6e0f7: #d6e0f7;
+	--fa-bd-d6e3fb: #d6e3fb;
+	--fa-bd-dbe4f7: #dbe4f7;
+	--fa-bd-eef1f8: #eef1f8;
+	--fa-bd-f5c2c2: #f5c2c2;
+}
+
+/* Dark (screen only, so printed boarding passes stay light) */
+@media not print {
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	background: #0b1220;
+}
+
+:root[data-theme="dark"] body {
+	background: #0b1220;
+	color: #e3e9f5;
+}
+
+:root[data-theme="dark"],
+:root[data-theme="dark"] flight-status-app {
+	color-scheme: dark;
+
+	--fa-bg: #0b1220;
+	--fa-surface: #131c2e;
+	--fa-surface-2: #1a2540;
+	--fa-surface-3: #0f1729;
+	--fa-border: #2a3550;
+	--fa-border-hover: #3a4a72;
+	--fa-border-strong: #3a4a72;
+	--fa-line: #2a3550;
+	--fa-navy: #0a1330;
+	--fa-heading: #e8eeff;
+	--fa-text: #e3e9f5;
+	--fa-text-soft: #b8c3dc;
+	--fa-text-secondary: #9aa7c2;
+	--fa-text-muted: #7d8bab;
+	--fa-link: #7aa8ff;
+	--fa-danger: #ff8a80;
+	--fa-warning: #ffc266;
+	--fa-success: #5dd68a;
+	--fa-danger-bg: #3a1d22;
+	--fa-warning-bg: #3a2e12;
+	--fa-success-bg: #12301f;
+	--fa-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+	--fa-blue: #4a84ff;
+	--fa-primary: #4a84ff;
+	--p-blue-dark: #8fb4ff;
+
+	--p-ink: #e8eeff;
+	--p-text: #c8d2e8;
+	--p-muted: #9aa7c2;
+	--p-line: #2a3550;
+	--p-soft: #1a2540;
+	--p-page: #0b1220;
+	--p-navy: #070f26;
+	--p-navy-2: #0c1a3d;
+	--p-blue: #3d7bff;
+	--p-ok: #3ecf8e;
+	--p-bad: #ff6b61;
+	--p-warn: #f2a33a;
+	--p-shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+	--p-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+	--p-shadow-lg: 0 18px 48px rgba(0, 0, 0, .55);
+
+	/* Dark values for the per-colour variables above: same colour, adjusted brightness. */
+	--fa-bg-d3efe0: #183c29;
+	--fa-bg-d7deec: #1c2537;
+	--fa-bg-d9e0ee: #1b2437;
+	--fa-bg-d9f5e3: #153822;
+	--fa-bg-dbe4f7: #152037;
+	--fa-bg-dbe6ff: #131d33;
+	--fa-bg-dbe9ff: #132033;
+	--fa-bg-dde6fa: #141e35;
+	--fa-bg-dfe8f7: #142035;
+	--fa-bg-dff7e7: #14351f;
+	--fa-bg-e0e7ff: #131a31;
+	--fa-bg-e0e9ff: #131c31;
+	--fa-bg-e3e9f6: #141e34;
+	--fa-bg-e4eeff: #121d30;
+	--fa-bg-e6eeff: #121b2f;
+	--fa-bg-e6f4ea: #17301e;
+	--fa-bg-e6f6ee: #143223;
+	--fa-bg-e7e9f0: #1d202c;
+	--fa-bg-e8edf7: #131d31;
+	--fa-bg-e8eefb: #121b30;
+	--fa-bg-e8f0fe: #121c2f;
+	--fa-bg-e8f0ff: #121b2e;
+	--fa-bg-e8f7ee: #13311f;
+	--fa-bg-e9eef7: #141e30;
+	--fa-bg-e9eef8: #121c31;
+	--fa-bg-e9f0fc: #121d2f;
+	--fa-bg-eaf0ff: #11192d;
+	--fa-bg-eaf1ff: #111b2d;
+	--fa-bg-eaf2ff: #111c2d;
+	--fa-bg-eceff3: #1b2129;
+	--fa-bg-eceff4: #1a202a;
+	--fa-bg-eef2f8: #141e2c;
+	--fa-bg-eef2fa: #111b2e;
+	--fa-bg-eef4ff: #111a2c;
+	--fa-bg-efe6ff: #1c122f;
+	--fa-bg-eff3fc: #11192d;
+	--fa-bg-f3f6fd: #10182b;
+	--fa-bg-f3f6ff: #10162a;
+	--fa-bg-f3f7ff: #10182a;
+	--fa-bg-f4f7fd: #10192a;
+	--fa-bg-f4f7ff: #101729;
+	--fa-bg-f4f8ff: #101929;
+	--fa-bg-f5f8ff: #101729;
+	--fa-bg-f6f8fd: #101729;
+	--fa-bg-f8fafc: #121c26;
+	--fa-bg-f8fafd: #0f1929;
+	--fa-bg-f8faff: #0f1628;
+	--fa-bg-f8fbff: #0f1a28;
+	--fa-bg-fbfcff: #0f1527;
+	--fa-bg-fdecea: #2e1512;
+	--fa-bg-fdecec: #2d1111;
+	--fa-bg-fdf3f7: #2b101b;
+	--fa-bg-ffe39a: #4d401d;
+	--fa-bg-fff0d1: #372c15;
+	--fa-bg-fff3c4: #3d3517;
+	--fa-bg-fff6dd: #332a13;
+	--fa-tx-0b2f94: #7796ee;
+	--fa-tx-0b7a43: #8defbe;
+	--fa-tx-0f3a99: #7398ea;
+	--fa-tx-1146d6: #6f90ec;
+	--fa-tx-12275c: #a7bae9;
+	--fa-tx-146c3c: #9ae7bd;
+	--fa-tx-15803d: #88e5ab;
+	--fa-tx-1a1a1a: #1a1a1a;
+	--fa-tx-1b3fa8: #7893e3;
+	--fa-tx-1e3a8a: #8098dd;
+	--fa-tx-1f2a44: #bdc7de;
+	--fa-tx-1f2a52: #b0bade;
+	--fa-tx-1f9d55: #7cdfa6;
+	--fa-tx-38604a: #a4c7b4;
+	--fa-tx-3a4a70: #96a4c5;
+	--fa-tx-3b4559: #aab3c4;
+	--fa-tx-475569: #9fabbc;
+	--fa-tx-4a5574: #9da6be;
+	--fa-tx-4a5875: #9da8be;
+	--fa-tx-555555: #adadad;
+	--fa-tx-5a6784: #a0a8bb;
+	--fa-tx-6a3dd6: #9a7edd;
+	--fa-tx-7a5200: #f9d68d;
+	--fa-tx-7a5b00: #f9de8d;
+	--fa-tx-8a96ad: #a0a9ba;
+	--fa-tx-a86400: #f7bc66;
+	--fa-tx-b27a00: #f7c964;
+	--fa-tx-b3261e: #e27f79;
+	--fa-tx-b42323: #df7c7c;
+	--fa-tx-b8860b: #efc96c;
+	--fa-tx-c0392b: #dc887f;
+	--fa-tx-c4282d: #de7d80;
+	--fa-tx-c98f00: #f7cc64;
+	--fa-tx-d64545: #dc7e7e;
+	--fa-bd-b9c6e6: #35415e;
+	--fa-bd-b9ceff: #192f63;
+	--fa-bd-bcd2ff: #183061;
+	--fa-bd-bfe6cd: #345941;
+	--fa-bd-c4cde0: #3a4254;
+	--fa-bd-c7d7f5: #233556;
+	--fa-bd-c9d2e3: #374050;
+	--fa-bd-cfd9f2: #26314e;
+	--fa-bd-cfdcff: #152654;
+	--fa-bd-d5dae4: #363b46;
+	--fa-bd-d6e0f7: #1f2c4a;
+	--fa-bd-d6e3fb: #1a2b4c;
+	--fa-bd-dbe4f7: #1f2c46;
+	--fa-bd-eef1f8: #1f2534;
+	--fa-bd-f5c2c2: #5a2424;
+}
+
+/* Form fields and placeholders */
+:root[data-theme="dark"] flight-status-app label,
+:root[data-theme="dark"] flight-status-app legend {
+	color: var(--fa-text);
+}
+
+:root[data-theme="dark"] flight-status-app input:not([type="checkbox"]):not([type="radio"]),
+:root[data-theme="dark"] flight-status-app select,
+:root[data-theme="dark"] flight-status-app textarea {
+	background-color: var(--fa-surface-3);
+	border-color: var(--fa-border);
+	color: var(--fa-text);
+}
+
+:root[data-theme="dark"] flight-status-app ::placeholder {
+	color: var(--fa-text-muted);
+}
+
+}
+
+/* The theme button in the header */
+flight-status-app .fa-themebtn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 38px;
+	height: 38px;
+	padding: 0;
+	border: 1px solid rgba(255, 255, 255, .35);
+	border-radius: 50%;
+	background: transparent;
+	color: #fff;
+	cursor: pointer;
+}
+
+flight-status-app .fa-themebtn:hover {
+	background: rgba(255, 255, 255, .14);
+}
+
+flight-status-app .fa-themebtn svg {
+	width: 20px;
+	height: 20px;
+}

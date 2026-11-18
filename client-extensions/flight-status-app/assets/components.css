@@ -92,7 +92,7 @@ img {
 
 .fa-btn--gold {
   background: var(--fa-gold);
-  color: var(--fa-text);
+  color: var(--fa-on-gold);
 }
 
 .fa-btn--gold:hover:not(:disabled) {
@@ -435,7 +435,7 @@ img {
   height: 32px;
   border-radius: 50%;
   background: var(--fa-gold);
-  color: var(--fa-text);
+  color: var(--fa-on-gold);
   display: grid;
   place-items: center;
   font-weight: var(--fa-font-weight-bold);

@@ -98,17 +98,3 @@
   --fa-z-modal: 1200;
   --fa-z-toast: 1300;
 }
-
-/* Dark mode support (optional, respects system preference) */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fa-bg: #0f172a;
-    --fa-surface: #1e293b;
-    --fa-border: #334155;
-    --fa-border-hover: #475569;
-    --fa-text: #f1f5f9;
-    --fa-text-secondary: #94a3b8;
-    --fa-text-muted: #64748b;
-    --fa-navy: #1e293b;
-  }
-}
