@@ -1,0 +1,26 @@
+{
+	"changi": {
+		"url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/66/Singapore_Changi_Airport_Terminal_3_%28113212%29.jpg/960px-Singapore_Changi_Airport_Terminal_3_%28113212%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+		"credit": "Moheen Reeyad (CC BY-SA 4.0), Wikimedia Commons"
+	},
+	"heathrow": {
+		"url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6d/Heathrow_Airport_Terminal_5.jpg/960px-Heathrow_Airport_Terminal_5.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+		"credit": "CedarGlen86 (CC0), Wikimedia Commons"
+	},
+	"kennedy": {
+		"url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a0/JFK_Terminal_4_June_2019_departures.jpg/960px-JFK_Terminal_4_June_2019_departures.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+		"credit": "Mybirthday647 (CC0), Wikimedia Commons"
+	},
+	"los angeles": {
+		"url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/30/Los_Angeles_International_Airport_%28LAX%29_tarmac.jpg/960px-Los_Angeles_International_Airport_%28LAX%29_tarmac.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+		"credit": "DreCube at Dutch Wikipedia (CC BY-SA 3.0), Wikimedia Commons"
+	},
+	"indira gandhi": {
+		"url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/18/Inside_Terminal_3_at_Indira_Gandhi_International_Airport.JPG/960px-Inside_Terminal_3_at_Indira_Gandhi_International_Airport.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+		"credit": "PDXDUS (CC0), Wikimedia Commons"
+	},
+	"kempegowda": {
+		"url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3d/Terminal_2_Departure_of_Kempegowda_International_Airport.jpg/960px-Terminal_2_Departure_of_Kempegowda_International_Airport.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+		"credit": "Sameer2905 (CC BY-SA 4.0), Wikimedia Commons"
+	}
+}

@@ -11,13 +11,13 @@ flight-status-app {
 	--fa-surface: #ffffff;
 	--fa-surface-2: #eef3ff;
 	--fa-surface-3: #f3f6fb;
-	--fa-border: #e3e9f6;
+	--fa-border: #d5ddee;
 	--fa-border-strong: #c9d6f5;
 	--fa-heading: #0f1e50;
 	--fa-text: #1c2434;
-	--fa-text-soft: #44506e;
-	--fa-text-secondary: #6b7790;
-	--fa-text-muted: #8a94a8;
+	--fa-text-soft: #35415c;
+	--fa-text-secondary: #4a5670;
+	--fa-text-muted: #66718a;
 	--fa-link: #0b5fff;
 	--fa-danger: #b42318;
 	--fa-warning: #8a5a00;
@@ -148,7 +148,9 @@ flight-status-app {
 }
 
 :root[data-theme="dark"],
-:root[data-theme="dark"] flight-status-app {
+:root[data-theme="dark"] flight-status-app,
+flight-status-app .fa-hometop,
+flight-status-app .fa-authpage {
 	color-scheme: dark;
 
 	--fa-bg: #0b1220;
@@ -160,11 +162,11 @@ flight-status-app {
 	--fa-border-strong: #3a4a72;
 	--fa-line: #2a3550;
 	--fa-navy: #0a1330;
-	--fa-heading: #e8eeff;
-	--fa-text: #e3e9f5;
-	--fa-text-soft: #b8c3dc;
-	--fa-text-secondary: #9aa7c2;
-	--fa-text-muted: #7d8bab;
+	--fa-heading: #f6f8ff;
+	--fa-text: #eef2fb;
+	--fa-text-soft: #d3dcf0;
+	--fa-text-secondary: #bcc8e0;
+	--fa-text-muted: #a3b1cd;
 	--fa-link: #7aa8ff;
 	--fa-danger: #ff8a80;
 	--fa-warning: #ffc266;
@@ -177,9 +179,9 @@ flight-status-app {
 	--fa-primary: #4a84ff;
 	--p-blue-dark: #8fb4ff;
 
-	--p-ink: #e8eeff;
-	--p-text: #c8d2e8;
-	--p-muted: #9aa7c2;
+	--p-ink: #f6f8ff;
+	--p-text: #dde5f5;
+	--p-muted: #bcc8e0;
 	--p-line: #2a3550;
 	--p-soft: #1a2540;
 	--p-page: #0b1220;
@@ -303,19 +305,25 @@ flight-status-app {
 
 /* Form fields and placeholders */
 :root[data-theme="dark"] flight-status-app label,
+flight-status-app .fa-authpage label,
+flight-status-app .fa-authpage legend,
 :root[data-theme="dark"] flight-status-app legend {
 	color: var(--fa-text);
 }
 
 :root[data-theme="dark"] flight-status-app input:not([type="checkbox"]):not([type="radio"]),
 :root[data-theme="dark"] flight-status-app select,
+flight-status-app .fa-authpage select,
+flight-status-app .fa-authpage textarea,
+flight-status-app .fa-authpage input:not([type="checkbox"]):not([type="radio"]),
 :root[data-theme="dark"] flight-status-app textarea {
 	background-color: var(--fa-surface-3);
 	border-color: var(--fa-border);
 	color: var(--fa-text);
 }
 
-:root[data-theme="dark"] flight-status-app ::placeholder {
+:root[data-theme="dark"] flight-status-app ::placeholder,
+flight-status-app .fa-authpage ::placeholder {
 	color: var(--fa-text-muted);
 }
 
@@ -343,4 +351,51 @@ flight-status-app .fa-themebtn:hover {
 flight-status-app .fa-themebtn svg {
 	width: 20px;
 	height: 20px;
+}
+
+
+/* ===== Glass-page tokens (--g-*): light values by default, dark values when the page is dark (.fa-glass) and inside the always-dark video areas ===== */
+flight-status-app {
+	--g-page-bg: var(--fa-bg);
+	--g-page-solid: var(--fa-bg);
+	--g-host-bg: var(--fa-bg);
+	--g-host-solid: var(--fa-bg);
+	--g-fill: #fff;
+	--g-fill-2: rgba(15, 30, 80, .05);
+	--g-line: rgba(15, 30, 80, .13);
+	--g-line-2: rgba(15, 30, 80, .24);
+	--g-text: #0f1e50;
+	--g-text-2: #3b4a6b;
+	--g-eyebrow: #1d4ed8;
+	--g-btn-bg: #0f1e50;
+	--g-btn-text: #fff;
+	--g-shadow-c: rgba(15, 30, 80, .10);
+	--g-ring-hole: var(--fa-bg);
+	--g-good: #16a34a;
+	--g-mid: #d97706;
+	--g-bad: #dc2626;
+}
+
+flight-status-app.fa-glass,
+flight-status-app .fa-hometop,
+flight-status-app .fa-authpage,
+flight-status-app .fa-live {
+	--g-page-bg: linear-gradient(180deg, #060e28 0%, #0a1330 40%, #070d22 100%);
+	--g-page-solid: #070d22;
+	--g-host-bg: linear-gradient(180deg, #0a1330 0%, #060e28 45%, #070d22 100%);
+	--g-host-solid: #070d22;
+	--g-fill: rgba(255, 255, 255, .05);
+	--g-fill-2: rgba(255, 255, 255, .08);
+	--g-line: rgba(255, 255, 255, .14);
+	--g-line-2: rgba(255, 255, 255, .28);
+	--g-text: #fff;
+	--g-text-2: #cfdcff;
+	--g-eyebrow: #9fc0ff;
+	--g-btn-bg: #fff;
+	--g-btn-text: #0f1e50;
+	--g-shadow-c: rgba(0, 0, 0, .4);
+	--g-ring-hole: #0a1330;
+	--g-good: #5dd68a;
+	--g-mid: #ffc266;
+	--g-bad: #ff8a80;
 }

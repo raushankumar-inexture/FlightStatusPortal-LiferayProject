@@ -166,7 +166,7 @@ public class LiveApplication extends Application {
 
             boolean liveOnly = !all && _liveOnly();
 
-            for (ObjectEntry entry : _entries("C_Flight", siteId)) {
+            for (ObjectEntry entry : _all("C_Flight", siteId)) {
                 Map<String, Serializable> v = entry.getValues();
 
                 // PUBLIC_FLIGHTS=live in flight-feed.properties hides the flights an administrator typed in.
@@ -212,7 +212,7 @@ public class LiveApplication extends Application {
         try {
             JSONArray out = JSONFactoryUtil.createJSONArray();
 
-            for (ObjectEntry entry : _entries("C_Gate", siteId)) {
+            for (ObjectEntry entry : _all("C_Gate", siteId)) {
                 Map<String, Serializable> v = entry.getValues();
 
                 JSONObject gate = JSONFactoryUtil.createJSONObject();
@@ -239,7 +239,7 @@ public class LiveApplication extends Application {
         try {
             JSONArray out = JSONFactoryUtil.createJSONArray();
 
-            for (ObjectEntry entry : _entries("C_Airport", 0)) {
+            for (ObjectEntry entry : _all("C_Airport", 0)) {
                 Map<String, Serializable> v = entry.getValues();
 
                 JSONObject airport = JSONFactoryUtil.createJSONObject();
@@ -465,6 +465,27 @@ public class LiveApplication extends Application {
         }
 
         return _liveOnlySetting;
+    }
+
+    /** Every entry of an object, read 500 at a time (the plain read below stops at the first 500). */
+    private List<ObjectEntry> _all(String objectName, long siteId) throws Exception {
+        ObjectDefinition definition = _objectDefinitionLocalService.getObjectDefinition(
+            PortalUtil.getDefaultCompanyId(), objectName);
+
+        List<ObjectEntry> all = new java.util.ArrayList<>();
+
+        for (int start = 0;; start += 500) {
+            List<ObjectEntry> page = _objectEntryLocalService.getObjectEntries(
+                siteId, definition.getObjectDefinitionId(), start, start + 500);
+
+            all.addAll(page);
+
+            if (page.size() < 500) {
+                break;
+            }
+        }
+
+        return all;
     }
 
     private List<ObjectEntry> _entries(String objectName, long siteId) throws Exception {

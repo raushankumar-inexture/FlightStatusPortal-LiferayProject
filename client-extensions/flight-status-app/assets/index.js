@@ -4,10 +4,13 @@ const SITE_ID = () => Liferay.ThemeDisplay.getScopeGroupId();
 
 // Theme: Light, Dark or Auto. The choice is kept in this browser; Auto follows the computer's own setting. theme.css holds the colours.
 const THEMES = ['auto', 'light', 'dark'];
-const getTheme = () => { try { const t = localStorage.getItem('faTheme'); return THEMES.includes(t) ? t : 'auto'; } catch (e) { return 'auto'; } };
+// New visitors start with Light (easier to read outdoors); Auto follows the device setting.
+const getTheme = () => { try { const t = localStorage.getItem('faTheme'); return THEMES.includes(t) ? t : 'light'; } catch (e) { return 'light'; } };
 const applyTheme = (choice) => {
 	const dark = choice === 'dark' || (choice === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
 	document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+	const host = document.querySelector('flight-status-app');
+	if (host && host.syncGlass) host.syncGlass();
 };
 applyTheme(getTheme());
 // Liferay's page-to-page navigation resets the attributes of the page, which dropped the theme. Put it back at once.
@@ -78,6 +81,9 @@ const airlineOf = (flightNumber, airline) => airline || (AIRLINES.find((a) => St
 const photoCache = {};
 // The picture of an airport: the lead picture of the airport's own Wikipedia page (never a city picture). Flags, maps, logos and drawings are skipped;
 // when there is no good picture one of our own aviation photos is used, always the same one for the same airport.
+// Chosen pictures for airports whose Wikipedia picture is weak (data file assets/airport-photos.json: a word of the airport name -> picture and credit).
+let airportOverrides = null;
+const loadAirportOverrides = () => (airportOverrides = airportOverrides || fetch('/o/flight-status-app/airport-photos.json').then((r) => (r.ok ? r.json() : {})).catch(() => ({})));
 const airportPhoto = (name) => {
 	const key = 'airport:' + name;
 	if (!photoCache[key]) {
@@ -87,7 +93,11 @@ const airportPhoto = (name) => {
 				if (saved !== null) return saved;
 			} catch (e) {}
 			let url = '';
+			const overrides = await loadAirportOverrides();
+			const hit = Object.keys(overrides).find((k) => String(name).toLowerCase().includes(k));
+			if (hit) url = overrides[hit].url;
 			try {
+				if (url) throw new Error('chosen picture');
 				const title = (/airport/i.test(name) ? name : name + ' Airport').replace(/ /g, '_');
 				const res = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title));
 				if (res.ok) {
@@ -112,14 +122,32 @@ const HERO_PHOTOS = [
 	['9.jpg', 'Apurba Biswas', 'CC0'], ['10.jpg', 'ANKAN', 'CC BY-SA 4.0'], ['11.jpg', 'Josekuttypanackal', 'CC BY 3.0'], ['12.jpg', 'Krish Aarush', 'CC BY-SA 4.0'],
 ];
 // The pictures for the login and register pages (files in assets/hero, listed above): 3 aircraft and 2 airports.
+// Map pictures: a clean map with English place names (Esri gray canvas, dark or light to match the theme; base layer plus a labels layer).
+const MAP_CREDIT = 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ';
+const addDarkMap = (map, opts) => {
+	const o = Object.assign({maxZoom: 12, maxNativeZoom: 16}, opts || {});
+	if (document.documentElement.dataset.theme !== 'dark') {
+		// Light theme: the colourful street map (green land, blue water, English names), like the first design.
+		L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', o).addTo(map);
+		return;
+	}
+	L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', o).addTo(map);
+	L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', Object.assign({}, o, {attribution: ''})).addTo(map);
+};
+// Looping background video of the Home hero. Empty string = photo only. It is skipped when the visitor prefers reduced motion or has data saving on; the hero photo stays behind it.
+const HERO_VIDEO = 'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_091828_e240eb17-6edc-4129-ad9d-98678e3fd238.mp4';
+// The clip plays once and stops on this second (the private jet fully in view). 0 = play to the very end.
+const HERO_VIDEO_FREEZE_AT = 8.4;
 const AUTH_PHOTOS = ['1.jpg', '3.jpg', '7.jpg', '8.jpg', '9.jpg'];
+// Page banners use only pictures of aircraft (the other files in assets/hero show terminal roofs and are used elsewhere).
+const BANNER_PHOTOS = HERO_PHOTOS.filter((p) => ['1.jpg', '2.jpg', '3.jpg', '4.jpg', '6.jpg', '7.jpg', '12.jpg'].includes(p[0]));
 const HERO = (() => {
-	let i = Math.floor(Math.random() * HERO_PHOTOS.length);
+	let i = Math.floor(Math.random() * BANNER_PHOTOS.length);
 	try {
-		if (i === Number(sessionStorage.getItem('faHero'))) i = (i + 1) % HERO_PHOTOS.length;
+		if (i === Number(sessionStorage.getItem('faHero'))) i = (i + 1) % BANNER_PHOTOS.length;
 		sessionStorage.setItem('faHero', i);
 	} catch (e) {}
-	return HERO_PHOTOS[i];
+	return BANNER_PHOTOS[i];
 })();
 const heroBg = (overlay) => overlay + ',url("/o/flight-status-app/hero/' + HERO[0] + '")';
 const showPhoto = (el, name, overlay) => airportPhoto(name).then((url) => {
@@ -129,8 +157,50 @@ const showPhoto = (el, name, overlay) => airportPhoto(name).then((url) => {
 	}
 });
 const fillPhotos = (root) => root.querySelectorAll('[data-hero]').forEach((el) => { el.style.backgroundImage = heroBg(el.dataset.photoOverlay); el.classList.add('has-photo'); });
+const fillVideo = (root) => {
+	const box = root.querySelector('[data-herovideo]');
+	let saver = false;
+	try { saver = !!(navigator.connection && navigator.connection.saveData) || matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+	if (!box || !HERO_VIDEO || saver) return;
+	const v = document.createElement('video');
+	// The clip plays once and then stays on its last frame. A small round button plays it again or pauses it.
+	v.src = HERO_VIDEO; v.muted = true; v.loop = false; v.autoplay = true; v.playsInline = true; v.preload = 'auto'; v.setAttribute('aria-hidden', 'true');
+	box.classList.add('loading');
+	v.addEventListener('error', () => { v.remove(); box.classList.remove('loading'); const old = box.parentElement && box.parentElement.querySelector('.fa-vbtn'); if (old) old.remove(); });
+	v.addEventListener('playing', () => { box.classList.add('on'); box.classList.remove('loading'); setBtn(); });
+	box.appendChild(v);
+	const host = box.parentElement;
+	const btn = document.createElement('button');
+	btn.type = 'button'; btn.className = 'fa-vbtn';
+	const ICON = {pause: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>', play: '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>', replay: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>'};
+	let frozen = false;
+	v.addEventListener('timeupdate', () => { if (HERO_VIDEO_FREEZE_AT && !frozen && v.currentTime >= HERO_VIDEO_FREEZE_AT) { frozen = true; v.pause(); setBtn(); } });
+	function setBtn() {
+		const kind = (v.ended || frozen) ? 'replay' : (v.paused ? 'play' : 'pause');
+		btn.innerHTML = ICON[kind];
+		btn.setAttribute('aria-label', kind === 'replay' ? 'Replay the background video' : kind === 'play' ? 'Play the background video' : 'Pause the background video');
+		btn.title = btn.getAttribute('aria-label');
+	}
+	btn.addEventListener('click', () => {
+		if (v.ended || frozen) { frozen = false; v.currentTime = 0; v.play().catch(() => {}); }
+		else if (v.paused) v.play().catch(() => {});
+		else v.pause();
+		setBtn();
+	});
+	['ended', 'pause', 'play'].forEach((e) => v.addEventListener(e, setBtn));
+	if (host) host.appendChild(btn);
+	setBtn();
+	// Stop the movement while the browser tab is hidden.
+	let resume = false;
+	document.addEventListener('visibilitychange', () => {
+		if (!v.isConnected) return;
+		if (document.hidden) { resume = !v.paused && !v.ended && !frozen; v.pause(); }
+		else if (resume) { resume = false; v.play().catch(() => {}); }
+	});
+	v.play().catch(() => {});
+};
 const fillCityPhotos = (root) => root.querySelectorAll('[data-photo-name]').forEach((el) => showPhoto(el, el.dataset.photoName, el.dataset.photoOverlay || ''));
-const fillAllPhotos = (root) => { fillPhotos(root); fillCityPhotos(root); };
+const fillAllPhotos = (root) => { fillPhotos(root); fillVideo(root); fillCityPhotos(root); };
 const logoHtml = (flightNumber, airline, cls) => {
 	const a = AIRLINES.find((x) => x[1] === airline) || AIRLINES.find((x) => String(flightNumber).toUpperCase().startsWith(x[0]));
 	return a ? `<img class="fa-airlogo ${cls || ''}" alt="" src="https://pics.avs.io/120/120/${a[0]}.png">` : '';
@@ -429,6 +499,11 @@ class FlightStatusApp extends HTMLElement {
 		const sidebar = sidebarMode ? '<aside class="fa-sidebar"><nav>' + sideItems.map((t) => `<a href="${root}/admin?tab=${t[0]}" class="${tab === t[0] ? 'active' : ''}">${ICONS[t[2]]}<span>${t[1]}</span></a>`).join('') +
 			`<a href="${root}/live-map">${ICONS.map}<span>Live Map</span></a><a class="fa-sideout" href="${root}/home?viewsite=1">${ICONS.out}<span>View site</span></a></nav></aside>` : '';
 		this.classList.toggle('has-sidebar', sidebarMode);
+		this.classList.toggle('fa-home', current === 'home');
+		this._glass = ['home', 'flights', 'search', 'airports', 'login', 'register', 'live', 'board', 'gates', 'ontime', 'boarding', 'alerts', 'admin'].includes(current);
+		this.classList.toggle('fa-dkpage', this._glass && current !== 'home');
+		this.syncGlass();
+		this.dataset.route = current;
 		applyTheme(getTheme());
 		this.innerHTML =
 			'<header class="fa-header"><div class="fa-header__inner"><a class="fa-brand" href="' + root + (adminMode ? '/admin' : '/home') + '"><span class="fa-brand__logo">' + ICONS.plane + '</span>Flight Status <b>' + (adminMode ? 'Admin' : 'Portal') + '</b></a>' +
@@ -449,6 +524,7 @@ class FlightStatusApp extends HTMLElement {
 		this.classList.toggle('has-bigfooter', !adminMode);
 		this.classList.toggle('has-crumbs', !!crumbs);
 		this.loadNotices();
+		if (!this._scrollBound) { this._scrollBound = true; const onScroll = () => this.classList.toggle('fa-scrolled', window.scrollY > 40); window.addEventListener('scroll', onScroll, { passive: true }); onScroll(); }
 
 		this.querySelector('.fa-burger').addEventListener('click', (e) => {
 			const open = this.querySelector('.fa-nav-links').classList.toggle('fa-nav-links--open');
@@ -501,9 +577,14 @@ class FlightStatusApp extends HTMLElement {
 		boxes.forEach((el) => {
 			if (!el.isConnected || el._leaflet_id) return;
 			const map = L.map(el, {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false}).setView([22.5, 80], el.classList.contains('tall') ? 5 : 4);
-			L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 8}).addTo(map);
+			addDarkMap(map, {maxZoom: 8});
 			air.forEach((a) => L.circleMarker([a.lat, a.lon], {radius: 3.2, color: '#fff', weight: 1, fillColor: '#0b5fff', fillOpacity: .95}).addTo(map));
 		});
+	}
+
+	// The navy glass look is used when the page is dark; in the Light theme the same layout is drawn in light colours.
+	syncGlass() {
+		this.classList.toggle('fa-glass', !!this._glass && document.documentElement.dataset.theme === 'dark');
 	}
 
 	// Fade sections in as they scroll into view, count numbers up, and put a photo on page banners.
@@ -513,7 +594,7 @@ class FlightStatusApp extends HTMLElement {
 			banner.dataset.pb = '1';
 			const topics = {flights: 'Airliner', search: 'Air travel', airports: 'Airport', gates: 'Airport terminal', live: 'Air traffic control', ontime: 'Airline', board: 'Airport terminal'};
 			const topic = topics[this._currentRoute];
-			if (topic) { banner.style.backgroundImage = heroBg('linear-gradient(90deg, rgba(15,30,80,.9) 0%, rgba(15,30,80,.6) 55%, rgba(15,30,80,.22) 100%)'); banner.classList.add('has-photo'); }
+			if (topic) { banner.style.backgroundImage = heroBg('linear-gradient(90deg, rgba(6,14,40,.86) 0%, rgba(6,14,40,.55) 55%, rgba(6,14,40,.3) 100%), linear-gradient(180deg, transparent 40%, rgba(6,14,40,.65))'); banner.classList.add('has-photo'); }
 		}
 		const items = view.querySelectorAll('.fa-reveal:not([data-seen])');
 		if (!items.length) return;
@@ -689,7 +770,7 @@ class FlightStatusApp extends HTMLElement {
 		// Photographers and licences of the pictures (page photos are listed in HERO_PHOTOS, transport photos in assets/guide/credits.json).
 		pages.photos = ['Photo credits', '<p>The pictures on this site are free-licence photos from Wikipedia and Wikimedia Commons. Thank you to the photographers.</p><h3>Page and banner photos</h3><p>' +
 			[...new Set(HERO_PHOTOS.map((x) => x[1] + ' (' + x[2] + ')'))].map(esc).join(', ') + '.</p><h3>Transport photos</h3><ul class="fa-credits"><li>Loading...</li></ul>' +
-			'<h3>Airport photos</h3><p>The airport pictures on the Airports page come from each airport\'s own Wikipedia page under a free licence.</p>'];
+			'<h3>Airport photos</h3><p>The airport pictures on the Airports page come from each airport\'s own Wikipedia page under a free licence.</p><ul class="fa-credits fa-airportcredits"></ul>'];
 		const [title, body] = pages[kind];
 		const modal = document.createElement('div');
 		modal.className = 'fa-modal';
@@ -699,6 +780,7 @@ class FlightStatusApp extends HTMLElement {
 		modal.querySelector('button').addEventListener('click', close);
 		modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 		if (kind === 'photos') {
+			loadAirportOverrides().then((o) => { const ul = modal.querySelector('.fa-airportcredits'); if (ul) ul.innerHTML = Object.keys(o).map((k) => '<li>' + esc(o[k].credit) + '</li>').join(''); });
 			this._guideCredits = this._guideCredits || this.json('/o/flight-status-app/guide/credits.json').catch(() => ({}));
 			this._guideCredits.then((c) => {
 				const list = modal.querySelector('.fa-credits');
@@ -749,13 +831,13 @@ class FlightStatusApp extends HTMLElement {
 	async view_live(view) {
 		view.innerHTML = '<div class="fa-title"><h1>Live Aircraft Tracking</h1><p>Real aircraft over India, from public ADS-B data. Updates every 20 seconds.</p></div>' +
 			'<div class="fa-trackslot"></div><div class="fa-stats fa-livestats" style="margin:0 0 1rem"></div>' +
-			'<form class="fa-livebar fa-citybar"><input class="fa-citysearch" placeholder="Flights over a city, e.g. Ahmedabad" /><button class="fa-btn" type="submit">Show flights</button><button class="fa-btn fa-btn-light fa-cityclear" type="button" hidden>Show full map</button></form>' +
-			'<div class="fa-livebar"><input class="fa-livesearch" placeholder="Find a callsign, e.g. AIC101 or IGO" /><span class="fa-livestate">Loading...</span></div>' +
-			'<div class="fa-map"></div><div class="fa-citylist"></div><p class="fa-credit">Aircraft data: <a href="https://adsb.fi" target="_blank" rel="noopener">adsb.fi</a> open data &middot; Routes: adsbdb.com &middot; Photos: Planespotters.net &middot; Map &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>';
+			'<div class="fa-livetools"><form class="fa-livebar fa-citybar"><input class="fa-citysearch" placeholder="Flights over a city, e.g. Ahmedabad" /><button class="fa-btn" type="submit">Show flights</button><button class="fa-btn fa-btn-light fa-cityclear" type="button" hidden>Show full map</button></form>' +
+			'<div class="fa-livebar"><input class="fa-livesearch" placeholder="Find a callsign, e.g. AIC101 or IGO" /><span class="fa-livestate">Loading...</span></div></div>' +
+			'<div class="fa-map"></div><div class="fa-citylist"></div><p class="fa-credit">Aircraft data: <a href="https://adsb.fi" target="_blank" rel="noopener">adsb.fi</a> open data &middot; Routes: adsbdb.com &middot; Photos: Planespotters.net &middot; Map tiles &copy; Esri</p>';
 		this.bindTrack(view.querySelector('.fa-trackslot'));
 		await this.loadLeaflet();
 		const map = L.map(view.querySelector('.fa-map'), {zoomControl: true}).setView([22.5, 80], 5);
-		L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 12, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+		addDarkMap(map, {maxZoom: 12, attribution: MAP_CREDIT});
 		const layer = L.layerGroup().addTo(map);
 		const state = view.querySelector('.fa-livestate'), stats = view.querySelector('.fa-livestats'), search = view.querySelector('.fa-livesearch');
 		let aircraft = [], base = [], area = [], city = null, ring = null, areaNote = '';
@@ -1181,7 +1263,7 @@ class FlightStatusApp extends HTMLElement {
 			const el = out.querySelector('.fa-trackmap');
 			if (!el) return;
 			map = L.map(el).setView([a.lat, a.lon], 6);
-			L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 12, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+			addDarkMap(map, {maxZoom: 12, attribution: MAP_CREDIT});
 			marker = L.marker([a.lat, a.lon], {icon: planeIcon(a)}).addTo(map);
 			this.json('/o/flight-live/route?callsign=' + encodeURIComponent(a.callsign)).then((r) => { const t = out.querySelector('.fa-trackroutetxt'); if (t && r && r.origin && r.destination) t.textContent = 'Route: ' + (r.origin.city || r.origin.name || '') + ' (' + r.origin.code + ') to ' + (r.destination.city || r.destination.name || '') + ' (' + r.destination.code + ')'; }).catch(() => {});
 			this.json('/o/flight-live/photo?hex=' + encodeURIComponent(a.hex)).then((p) => { const t = out.querySelector('.fa-trackphoto'); if (t && p && p.url) t.innerHTML = '<img src="' + esc(p.url) + '" alt="" style="max-width:260px;border-radius:8px">' + (p.credit ? '<small>' + esc(p.credit) + '</small>' : ''); }).catch(() => {});
@@ -1555,7 +1637,7 @@ class FlightStatusApp extends HTMLElement {
 	// Login and Register share one look: an aircraft or airport picture beside the form. The photographer is named in the footer and in a hover text, not on the picture.
 	authShell(title, cardTitle, subtitle, formHtml, altHtml) {
 		const photo = this.authPhoto();
-		return '<div class="fa-authpage has-photo" title="Photo: ' + esc(photo.credit) + '" style="background-image: linear-gradient(180deg, rgba(12,34,92,.50), rgba(8,18,50,.84)), url(\'/o/flight-status-app/hero/' + esc(photo.file) + '\')"><div class="fa-authwrap">' +
+		return '<div class="fa-authpage has-photo" title="Photo: ' + esc(photo.credit) + '" style="background-image: linear-gradient(180deg, rgba(12,34,92,.50), rgba(8,18,50,.84)), url(\'/o/flight-status-app/hero/' + esc(photo.file) + '\')"><div class="fa-herovideo" data-herovideo="1"></div><div class="fa-authwrap">' +
 			'<h1 class="fa-authtitle">' + title + '</h1>' +
 			'<section class="fa-authcard2"><header>' + cardTitle + '</header><div class="fa-authbody">' + (subtitle ? '<p class="fa-authsub">' + subtitle + '</p>' : '') + formHtml + altHtml + '</div></section>' +
 			'</div></div>';
@@ -1776,6 +1858,11 @@ class FlightStatusApp extends HTMLElement {
 		return cards.length ? '<section class="fa-section fa-helprow"><div class="fa-head"><h2>Need help?</h2></div><div class="fa-helpgrid">' + cards.join('') + '</div></section>' : '';
 	}
 
+	numRow(stats) {
+		const live = [['<b data-live="air">-</b>', 'Aircraft in the air'], ['<b data-lbcount>-</b>', 'Live boards']];
+		return '<div class="fa-numrow">' + stats.map((s) => `<div><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div>`).join('') + live.map((l) => `<div>${l[0]}<span>${l[1]}</span></div>`).join('') + '</div>';
+	}
+
 	statTiles(stats) {
 		return '<div class="fa-stats">' + stats.map((s) => `<div class="fa-stat"><span class="fa-ico">${ICONS[s.icon]}</span><div><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div></div>`).join('') + '</div>';
 	}
@@ -1819,26 +1906,28 @@ class FlightStatusApp extends HTMLElement {
 		const seen = new Set();
 		const routes = flights.filter((f) => !seen.has(routeKey(f)) && seen.add(routeKey(f))).slice(0, 8);
 		view.innerHTML =
-			'<section class="fa-herox" data-hero="1" title="Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons" data-photo-overlay="linear-gradient(180deg, rgba(8,18,50,.30) 0%, rgba(8,18,50,.55) 55%, rgba(8,18,50,.86) 100%)">' +
-			'<div class="fa-herox-in"><span class="fa-pill">&#9679; Live flight tracking</span><h1>Know where your flight is, <em>before you leave</em></h1>' +
+			'<div class="fa-hometop"><div class="fa-herovideo" data-hero="1" data-herovideo="1" title="Photo: ' + esc(HERO[1]) + ' (' + HERO[2] + '), Wikimedia Commons" data-photo-overlay="linear-gradient(180deg, rgba(6,14,40,.35), rgba(6,14,40,.6))"></div><section class="fa-herox">' +
+			'<div class="fa-herox-in"><span class="fa-pill">&#9679; Live flight tracking</span><h1><span>Every flight.</span><span class="fa-h1b">Always in <em>sight.</em></span></h1>' +
 			'<p>Live departures, arrivals, gates and delays across every airport we cover, plus real aircraft on the map.</p>' +
-			'</div><div class="fa-heropanel"><div><b data-live="air">-</b><span>Aircraft in the air now</span></div><div><b data-lbcount>-</b><span>Airports with live boards</span></div><div><b>20s</b><span>Aircraft position refresh</span></div></div></section>' +
+			'<div class="fa-herobtns"><a class="fa-herobtn" href="' + r + '/flight-status">Flight status</a><a class="fa-herobtn fa-herobtn--solid" href="#fa-checkin">Check in</a></div>' +
+			'</div></section>' +
 			'<section class="fa-searchcard"><div class="fa-stabs"><button type="button" class="active" data-t="num">Flight number</button><button type="button" data-t="route">Route &amp; date</button><button type="button" data-t="board">Airport board</button></div>' +
 			'<form class="fa-sform" data-p="num"><input name="q" placeholder="Flight number, airline or city, e.g. AI101 or IndiGo" /><button class="fa-btn" type="submit">Search flight</button></form>' +
 			'<form class="fa-sform" data-p="route" hidden><label>From<select name="from">' + airportOpts('') + '</select></label><label>To<select name="to">' + airportOpts('') + '</select></label><label>Date<input type="date" name="date" /></label><button class="fa-btn" type="submit">Search flights</button></form>' +
 			'<form class="fa-sform" data-p="board" hidden><label>Airport<select name="airport">' + Object.values(ap).sort((x, y) => x.city.localeCompare(y.city)).map((a) => `<option value="${esc(a.code)}">${esc(a.city)} (${esc(a.code)}) - ${esc(a.name)}</option>`).join('') + '</select></label><button class="fa-btn" type="submit">Open board</button></form>' +
 			(routes.length ? '<div class="fa-poproutes"><span>Popular routes</span>' + routes.map((f) => `<a href="${r}/search?from=${esc(f.originAirportId)}&to=${esc(f.destinationAirportId)}">${esc((ap[f.originAirportId] || {}).code || '?')} &rarr; ${esc((ap[f.destinationAirportId] || {}).code || '?')}</a>`).join('') + '</div>' : '') + '</section>' +
-			this.statTiles(this.stats(flights, ap)) +
-			'<div class="fa-homegrid"><section class="fa-section fa-liveboard"><div class="fa-head"><div><span class="fa-eyebrow">Live from the airports</span><h2>Arrivals and departures right now</h2></div><a class="fa-headlink" href="' + r + '/flight-status">Open the full boards &rarr;</a></div>' +
+			'</div>' +
+			'<div class="fa-homebelow">' + this.numRow(this.stats(flights, ap)) + '<div class="fa-homegrid"><section class="fa-section fa-liveboard fa-reveal"><div class="fa-head"><div><span class="fa-eyebrow">Live from the airports</span><h2>Arrivals and departures right now</h2></div><a class="fa-headlink" href="' + r + '/flight-status">Open the full boards &rarr;</a></div>' +
 			'<div class="fa-lbtabs" role="tablist"></div><div class="fa-lbbody"><div class="fa-skel"><i></i><i></i><i></i></div></div></section>' + this.helpRow(r) +
-			'<section class="fa-checkin"><div class="fa-ck-text"><span class="fa-pill dark">Online check-in</span><h2>Check in and get your boarding pass</h2><p>Enter the booking code (PNR) and last name from your ticket. Check-in is free, and you can choose your own seat before the flight lands.</p></div>' +
+			'<section class="fa-checkin fa-reveal" id="fa-checkin"><div class="fa-ck-text"><span class="fa-pill dark">Online check-in</span><h2>Check in and get your boarding pass</h2><p>Enter the booking code (PNR) and last name from your ticket. Check-in is free, and you can choose your own seat before the flight lands.</p></div>' +
 			'<form class="fa-ckform"><input name="pnr" placeholder="PNR / booking code" autocomplete="off" maxlength="12" /><input name="last" placeholder="Last name" autocomplete="off" maxlength="40" /><button class="fa-btn" type="submit" disabled>Check in</button><small>' + (Liferay.ThemeDisplay.isSignedIn() ? 'Your booking code is on your ticket.' : 'You will be asked to sign in first.') + '</small></form></section>' +
 			'<section class="fa-live fa-reveal"><div class="fa-live-text"><span class="fa-pill dark"><i class="fa-dot"></i> Live now</span><h2>Aircraft flying over India right now</h2><p>Real positions from open ADS-B data, refreshed every 20 seconds. Open the full map and click any plane to see where it is going, with its photo.</p>' +
 			'<div class="fa-livestats"><div><b data-live="air">-</b><span>In the air</span></div><div><b data-live="alt">-</b><span>Average altitude</span></div><div><b data-live="ground">-</b><span>On the ground</span></div></div><a class="fa-btn" href="' + r + '/live-map">Open the live map</a></div><div class="fa-minimap tall"></div></section></div>' +
-			'<div class="fa-twocol">' + ['Domestic', 'International'].map((k) => {
-				const hits = flights.filter((f) => kindOf(f, ap) === k).slice(0, 3);
+			'<div class="fa-twocol fa-reveal">' + ['Domestic', 'International'].map((k) => {
+				const recent = Date.now() - 6 * 3600000;
+				const hits = flights.filter((f) => kindOf(f, ap) === k && (parseDate(f.departureTime) || 0).valueOf() >= recent).slice(0, 3);
 				return '<section class="fa-section"><div class="fa-head"><h2>' + k + ' flights</h2><a href="' + r + '/flight-status">View all &rarr;</a></div>' +
-					(hits.length ? hits.map((f) => this.flightRow(f, ap)).join('') : '<div class="fa-msg">No ' + k.toLowerCase() + ' flights found.</div>') + '</section>';
+					(hits.length ? hits.map((f) => this.flightRow(f, ap)).join('') : '<div class="fa-msg">No upcoming ' + k.toLowerCase() + ' flights right now.</div>') + '</section>';
 			}).join('') + '</div>' +
 			'<section class="fa-section fa-reveal"><div class="fa-head"><h2>Popular destinations</h2><a href="' + r + '/airports">All airports &rarr;</a></div><div class="fa-destgrid">' +
 			served.slice(0, 12).map((a) => {
@@ -1849,9 +1938,8 @@ class FlightStatusApp extends HTMLElement {
 			[['search', '1', 'Search', 'Find a flight by number, route, date or airline.'], ['bell', '2', 'Follow', 'Tap "Get email alerts" to hear about delays and gate changes.'], ['gate', '3', 'Check in', 'Enter your booking code, choose your seat and get your boarding pass.'], ['plane', '4', 'Fly', 'Watch your aircraft live on the map until it lands.']]
 				.map((x) => `<div class="fa-step"><span class="fa-stepno">${x[1]}</span><span class="fa-ico">${ICONS[x[0]]}</span><b>${x[2]}</b><p>${x[3]}</p></div>`).join('') + '</div></section>' +
 			(airlines.length ? '<section class="fa-section fa-reveal"><div class="fa-head"><h2>Airlines we track</h2></div><div class="fa-airlines">' + airlines.map((n) => `<div class="fa-airline">${logoHtml('', n)}<span>${esc(n)}</span></div>`).join('') + '</div></section>' : '') +
-			'<section class="fa-counters fa-reveal"><div><b data-count="' + flights.length + '">0</b><span>Flights tracked</span></div><div><b data-count="' + Object.keys(ap).length + '">0</b><span>Airports</span></div><div><b data-count="' + airlines.length + '">0</b><span>Airlines</span></div><div><b data-count="' + this.stats(flights, ap)[1].value.replace('%', '') + '" data-suffix="%">0</b><span>On-time rate</span></div></section>' +
-			'<section class="fa-cta"><div><h2>Ready to check your flight?</h2><p>Search by flight number or browse everything that is flying today.</p></div>' +
-			'<a class="fa-btn" href="' + r + '/search">Search flights</a></section>';
+			'<section class="fa-cta fa-reveal"><div><h2>Ready to check your flight?</h2><p>Search by flight number or browse everything that is flying today.</p></div>' +
+			'<a class="fa-btn" href="' + r + '/search">Search flights</a></section></div>';
  		fillAllPhotos(view);
 		this.bindMiniMaps(view);
 		this.bindLiveBoard(view, ap);
@@ -1948,7 +2036,7 @@ class FlightStatusApp extends HTMLElement {
 		this.bindFlightAlerts(view);
 		const day = (v) => { const d = parseDate(v); return d ? d.toLocaleDateString('en-CA') : ''; };
 		const todayKey = new Date().toLocaleDateString('en-CA'), tomorrowKey = new Date(Date.now() + 86400000).toLocaleDateString('en-CA');
-		const st = this._fs = this._fs || {tab: 'airport', airport: '', date: todayKey, dir: 'dep', terminal: '', airline: '', from: '', to: '', open: new Set()};
+		const st = this._fs = this._fs || {tab: 'airport', airport: '', date: todayKey, dir: 'dep', terminal: '', airline: '', from: '', to: '', open: new Set(), limit: 50};
 		const SITES = {'Air India': 'https://www.airindia.com', 'IndiGo': 'https://www.goindigo.in', 'SpiceJet': 'https://www.spicejet.com', 'Akasa Air': 'https://www.akasaair.com', 'Air India Express': 'https://www.airindiaexpress.com', 'Emirates': 'https://www.emirates.com', 'Singapore Airlines': 'https://www.singaporeair.com', 'American Airlines': 'https://www.aa.com', 'Delta Air Lines': 'https://www.delta.com', 'United Airlines': 'https://www.united.com', 'British Airways': 'https://www.britishairways.com', 'Virgin Atlantic': 'https://www.virginatlantic.com'};
 		const COORDS = {DEL: [28.56, 77.10], BOM: [19.09, 72.87], BLR: [13.20, 77.71], CCU: [22.65, 88.45], MAA: [12.99, 80.17], HYD: [17.24, 78.43], AMD: [23.08, 72.63], JFK: [40.64, -73.78], LAX: [33.94, -118.41], DXB: [25.25, 55.36], LHR: [51.47, -0.45], SIN: [1.36, 103.99]};
 		const WX = {0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Fog', 51: 'Light drizzle', 53: 'Drizzle', 55: 'Heavy drizzle', 61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 80: 'Rain showers', 81: 'Rain showers', 82: 'Heavy showers', 95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm'};
@@ -2087,7 +2175,7 @@ class FlightStatusApp extends HTMLElement {
 				'<span class="fa-fmore">' + (open ? 'Hide details' : 'View details') + '</span></button>' + (open ? details(f, o, d, s) : '') + '</div>';
 		};
 
-		const fillWeather = () => view.querySelectorAll('.fa-wx[data-code]').forEach(async (el) => {
+		const fillWeather = (root) => (root || view).querySelectorAll('.fa-wx[data-code]').forEach(async (el) => {
 			const code = el.dataset.code, c = COORDS[code], text = el.querySelector('.fa-wxtext');
 			if (!c) { text.textContent = 'Weather is not available for this airport.'; return; }
 			this._wx = this._wx || {};
@@ -2106,12 +2194,32 @@ class FlightStatusApp extends HTMLElement {
 			if (st.tab === 'flight') { box.innerHTML = ''; return; }
 			const list = results();
 			box.innerHTML = '<div class="fa-fshead"><h2>' + (st.tab === 'airport' ? esc(airportOf(st.airport).city || 'Airport') + ' ' + (arrivals() ? 'arrivals' : 'departures') : 'Flights on this route') + '</h2><span>' + list.length + ' flight' + (list.length === 1 ? '' : 's') + ' on ' + esc(fmtDate(st.date + 'T12:00:00')) + '</span>' + (st.tab === 'airport' ? this.guideButton(ap[st.airport], guides, 'To and from this airport') : '') + '</div>' +
-				boardNote() + (list.length && st.tab === 'airport' ? '<div class="fa-fthead fa-fthead--air" aria-hidden="true"><span>Airline</span><span>' + (arrivals() ? 'From' : 'To') + '</span><span>' + (arrivals() ? 'Arrival' : 'Departure') + '</span><span>' + (arrivals() ? 'Terminal / belt' : 'Terminal / gate') + '</span><span>Status</span><span></span></div>' : '') + (list.length ? list.map(row).join('') : '<div class="fa-msg">No flights found for this day. Try another day or airport. Our live data covers only some flights each day.</div>');
-			box.querySelectorAll('.fa-fhead').forEach((b) => b.addEventListener('click', () => { st.open.has(b.dataset.id) ? st.open.delete(b.dataset.id) : st.open.add(b.dataset.id); drawResults(); }));
-			box.querySelectorAll('[data-track]').forEach((b) => b.addEventListener('click', () => { st.tab = 'flight'; st.track = b.dataset.track; drawPane(); window.scrollTo({top: 0, behavior: 'smooth'}); }));
+				boardNote() + (list.length && st.tab === 'airport' ? '<div class="fa-fthead fa-fthead--air" aria-hidden="true"><span>Airline</span><span>' + (arrivals() ? 'From' : 'To') + '</span><span>' + (arrivals() ? 'Arrival' : 'Departure') + '</span><span>' + (arrivals() ? 'Terminal / belt' : 'Terminal / gate') + '</span><span>Status</span><span></span></div>' : '') + (list.length ? list.slice(0, st.limit).map(row).join('') + (list.length > st.limit ? '<div class="fa-showmore"><span>Showing ' + st.limit + ' of ' + list.length + '</span><button class="fa-btn" type="button" data-more="1">Show 50 more</button></div>' : '') : '<div class="fa-msg">No flights found for this day. Try another day or airport. Our live data covers only some flights each day.</div>');
+			box._rows = new Map(list.map((f) => [String(f.id), f]));
+			if (!box._bound) {
+				// One click handler for the whole list: open or close only the clicked row (the other rows are not redrawn).
+				box._bound = true;
+				box.addEventListener('click', (e) => {
+					const t = e.target instanceof Element ? e.target : null;
+					if (!t) return;
+					const track = t.closest('[data-track]');
+					if (track) { st.tab = 'flight'; st.track = track.dataset.track; drawPane(); window.scrollTo({top: 0, behavior: 'smooth'}); return; }
+					if (t.closest('[data-more]')) { st.limit += 50; drawResults(); return; }
+					const head = t.closest('.fa-fhead');
+					if (!head) return;
+					const f = box._rows.get(String(head.dataset.id)), frow = head.closest('.fa-frow');
+					if (!f || !frow) return;
+					st.open.has(head.dataset.id) ? st.open.delete(head.dataset.id) : st.open.add(head.dataset.id);
+					frow.insertAdjacentHTML('afterend', row(f));
+					const fresh = frow.nextElementSibling;
+					frow.remove();
+					fillWeather(fresh);
+				});
+			}
 			fillWeather();
 		};
 		const drawPane = async () => {
+			st.limit = 50;
 			view.querySelectorAll('.fa-fstab').forEach((b) => b.classList.toggle('active', b.dataset.t === st.tab));
 			const pane = view.querySelector('.fa-fspane');
 			if (st.tab === 'airport') await ensureBoard();
@@ -2353,7 +2461,7 @@ class FlightStatusApp extends HTMLElement {
 			try { await this.loadLeaflet(); } catch (e) { return; }
 			if (!map) {
 				map = L.map(box, {scrollWheelZoom: false});
-				L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap'}).addTo(map);
+				addDarkMap(map, {maxZoom: 19, attribution: MAP_CREDIT});
 			}
 			if (layer) layer.remove();
 			layer = L.layerGroup().addTo(map);
@@ -2714,9 +2822,10 @@ class FlightStatusApp extends HTMLElement {
 		const draw = (list) => {
 			const here = airports.find((a) => a.code === code);
 			const dep = tab === 'dep';
-			const rows = list.filter((f) => String(dep ? f.originAirportId : f.destinationAirportId) === String(here && here.id))
+			const recent = Date.now() - 6 * 3600000;
+			const rows = list.filter((f) => String(dep ? f.originAirportId : f.destinationAirportId) === String(here && here.id) && (parseDate(dep ? f.departureTime : f.arrivalTime) || 0).valueOf() >= recent)
 				.sort((a, b) => String(dep ? a.departureTime : a.arrivalTime).localeCompare(String(dep ? b.departureTime : b.arrivalTime)));
-			if (!rows.length) { wrap.innerHTML = '<div class="fa-msg">No ' + (dep ? 'departures' : 'arrivals') + ' for this airport.</div>'; return; }
+			if (!rows.length) { wrap.innerHTML = '<div class="fa-msg">No upcoming ' + (dep ? 'departures' : 'arrivals') + ' for this airport right now. The <a href="' + this._root + '/flight-status?airport=' + encodeURIComponent(code) + '&dir=' + (dep ? 'dep' : 'arr') + '">Flight Status page</a> shows the live board of the airport where we have one.</div>'; return; }
 			wrap.innerHTML = '<div class="fa-board"><table><thead><tr><th>Time</th><th>Flight</th><th>' + (dep ? 'To' : 'From') + '</th><th>Gate</th><th>Status</th></tr></thead><tbody>' +
 				rows.map((f) => {
 					const when = dep ? f.departureTime : f.arrivalTime, other = ap[dep ? f.destinationAirportId : f.originAirportId] || {};
@@ -2767,7 +2876,8 @@ class FlightStatusApp extends HTMLElement {
 		const table = (title, rows, col) => '<section class="fa-section"><div class="fa-head"><h2>' + title + '</h2></div><div class="fa-tablewrap"><table class="fa-table fa-otp"><thead><tr><th>' + col + '</th><th>Flights</th><th>On time</th><th>Delayed</th><th>Avg delay</th><th>On-time rate</th></tr></thead><tbody>' +
 			rows.map((g) => `<tr><td><b>${esc(g.name)}</b></td><td>${g.total}</td><td>${g.total - g.late}</td><td>${g.late}</td><td>${g.avg ? g.avg + ' min' : '-'}</td><td><div class="fa-bar ${g.rate >= 80 ? 'good' : g.rate >= 60 ? 'mid' : 'bad'}"><i style="width:${g.rate}%"></i></div><b>${g.rate}%</b></td></tr>`).join('') + '</tbody></table></div></section>';
 		view.innerHTML = '<div class="fa-title"><h1>On-time Performance</h1><p>How reliable each airline and airport is, from the flights in our network.</p></div>' +
-			this.statTiles([{icon: 'shield', value: (total ? Math.round(((total - late) / total) * 100) : 100) + '%', label: 'Overall on-time rate'}, {icon: 'plane', value: total, label: 'Flights counted'}, {icon: 'clock', value: late, label: 'Delayed or cancelled'}, {icon: 'bell', value: avg ? avg + ' min' : '-', label: 'Average delay'}]) +
+			'<div class="fa-otphead"><div class="fa-ring" style="--p:' + (total ? Math.round(((total - late) / total) * 100) : 100) + '"><b>' + (total ? Math.round(((total - late) / total) * 100) : 100) + '%</b><span>on time</span></div>' +
+			this.statTiles([{icon: 'plane', value: total, label: 'Flights counted'}, {icon: 'clock', value: late, label: 'Delayed or cancelled'}, {icon: 'bell', value: avg ? avg + ' min' : '-', label: 'Average delay'}]) + '</div>' +
 			table('By airline', byAirline, 'Airline') + table('By departure airport', byAirport, 'Airport') +
 			'<p class="fa-credit">A flight counts as late when it is marked Delayed or Cancelled, or has delay minutes.</p>';
 	}
@@ -2777,8 +2887,8 @@ class FlightStatusApp extends HTMLElement {
 		const terminals = {};
 		items.forEach((g) => (terminals[g.terminal] = terminals[g.terminal] || []).push(g));
 		view.innerHTML = '<div class="fa-title"><h1>Gates</h1><p>' + items.length + ' gates across ' + Object.keys(terminals).length + ' terminals.</p></div>' +
-			(Object.keys(terminals).sort().map((t) => `<section class="fa-section"><div class="fa-head"><h2>Terminal ${esc(t)}</h2></div><div class="fa-grid">` +
-				terminals[t].map((g) => `<div class="fa-card"><span class="fa-ico">${ICONS.gate}</span><b>Gate ${esc(g.gateNumber)}</b><span>Terminal ${esc(g.terminal)}</span></div>`).join('') + '</div></section>').join('') || '<div class="fa-msg">No gates found.</div>');
+			('<div class="fa-termgrid">' + Object.keys(terminals).sort().map((t) => `<section class="fa-section"><div class="fa-head"><h2>Terminal ${esc(t)}</h2></div><div class="fa-grid">` +
+				terminals[t].map((g) => `<div class="fa-card"><span class="fa-ico">${ICONS.gate}</span><b>Gate ${esc(g.gateNumber)}</b><span>Terminal ${esc(g.terminal)}</span></div>`).join('') + '</div></section>').join('') + '</div>' + (items.length ? '' : '<div class="fa-msg">No gates found.</div>'));
 		this.setupFilter(view, {key: 'gates', items: '.fa-card', placeholder: 'Search gate or terminal'});
 	}
 }
